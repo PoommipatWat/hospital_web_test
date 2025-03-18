@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}เพิ่มผู้ป่วยใหม่ - ระบบบันทึก Vital Signs{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow-md p-6">
+    <h1 class="text-2xl font-semibold text-gray-800 mb-6">เพิ่มผู้ป่วยใหม่</h1>
+    
+    <form method="POST" action="{{ url_for('add_patient') }}" class="space-y-6">
+        <div class="bg-indigo-50 rounded-lg p-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="mb-4">
+                    <label for="patient_id" class="block text-sm font-medium text-gray-700 mb-1">รหัสผู้ป่วย</label>
+                    <input type="text" id="patient_id" name="patient_id" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required placeholder="เช่น P001">
+                    <p class="text-xs text-gray-500 mt-1">กรุณาระบุรหัสผู้ป่วยที่ไม่ซ้ำกับในระบบ</p>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="patient_name" class="block text-sm font-medium text-gray-700 mb-1">ชื่อ-นามสกุล</label>
+                    <input type="text" id="patient_name" name="patient_name" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required placeholder="เช่น สมชาย ใจดี">
+                </div>
+                
+                <div class="mb-4">
+                    <label for="room_number" class="block text-sm font-medium text-gray-700 mb-1">หมายเลขห้อง</label>
+                    <input type="text" id="room_number" name="room_number" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" placeholder="เช่น 101A">
+                </div>
+
+                <div class="mb-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="weight" class="block text-sm font-medium text-gray-700 mb-1">น้ำหนัก (กก.)</label>
+                            <input type="number" id="weight" name="weight" step="0.1" min="0" max="300" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" placeholder="เช่น 65.5">
+                        </div>
+                        <div>
+                            <label for="height" class="block text-sm font-medium text-gray-700 mb-1">ส่วนสูง (ซม.)</label>
+                            <input type="number" id="height" name="height" step="0.1" min="0" max="250" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" placeholder="เช่น 170.5">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ปุ่มบันทึกและยกเลิก -->
+        <div class="flex justify-end space-x-3">
+            <a href="{{ url_for('index') }}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors">
+                ยกเลิก
+            </a>
+            <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
+                บันทึกข้อมูล
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

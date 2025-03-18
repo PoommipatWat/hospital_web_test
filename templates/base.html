@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#4f46e5">
+    <title>{% block title %}ระบบบันทึก Vital Signs{% endblock %}</title>
+    <!-- ใช้ Tailwind CSS จาก CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- ใช้ Font ภาษาไทยที่อ่านง่าย -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Sarabun', sans-serif;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .vital-table th, .vital-table td {
+            padding: 8px;
+            text-align: center;
+        }
+        .vital-table th {
+            background-color: #f3f4f6;
+        }
+        .vital-table tr:nth-child(even) {
+            background-color: #f9fafb;
+        }
+        
+        /* UI สำหรับอุปกรณ์เคลื่อนที่ */
+        @media (max-width: 640px) {
+            .vital-table {
+                font-size: 0.85rem;
+            }
+            
+            .vital-table th, .vital-table td {
+                padding: 6px 4px;
+            }
+            
+            /* ปรับขนาดปุ่มให้เหมาะสมกับการสัมผัส */
+            button, .btn, a.btn, input[type="submit"] {
+                min-height: 44px;
+                min-width: 44px;
+            }
+            
+            /* ปรับช่องว่างให้ UI สวยงาม */
+            .px-4 {
+                padding-left: 0.75rem;
+                padding-right: 0.75rem;
+            }
+            
+            /* ปรับขนาดฟอนต์ให้เหมาะสม */
+            h1 {
+                font-size: 1.5rem;
+            }
+            
+            h2 {
+                font-size: 1.25rem;
+            }
+            
+            .text-sm {
+                font-size: 0.8rem;
+            }
+        }
+        
+        /* ปรับการแสดงผลเพื่อหลีกเลี่ยงการซ้อนทับและเพิ่มความสะดวกในการใช้งาน */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: white;
+            border-top: 1px solid #e2e8f0;
+            padding: 0.5rem;
+            display: none;
+            z-index: 50;
+        }
+        
+        @media (max-width: 640px) {
+            .bottom-nav {
+                display: flex;
+            }
+            
+            main {
+                padding-bottom: 5rem;
+            }
+        }
+        
+        /* สไตล์สำหรับเครื่องมือคำนวณ */
+        .calculator-tool {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: white;
+            border-top: 1px solid #e2e8f0;
+            padding: 1rem;
+            z-index: 100;
+            transform: translateY(100%);
+            transition: transform 0.3s ease-out;
+            box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .calculator-tool.active {
+            transform: translateY(0);
+        }
+        
+        .calculator-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 90;
+            opacity: 0;
+            transition: opacity 0.3s ease-out;
+            display: none;
+        }
+        
+        .calculator-overlay.active {
+            opacity: 1;
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navbar -->
+    <nav class="bg-indigo-600 text-white shadow-md">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <a href="{{ url_for('index') }}" class="text-xl font-semibold flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+                ระบบบันทึก Vital Signs
+            </a>
+            <div class="hidden md:flex space-x-4">
+                <a href="{{ url_for('index') }}" class="py-2 px-3 hover:bg-indigo-700 rounded">รายชื่อผู้ป่วย</a>
+                <a href="{{ url_for('add_patient') }}" class="py-2 px-3 hover:bg-indigo-700 rounded">เพิ่มผู้ป่วย</a>
+                <a href="{{ url_for('add_vital') }}" class="py-2 px-3 hover:bg-indigo-700 rounded">บันทึกข้อมูลใหม่</a>
+                <button id="calculator-btn" class="py-2 px-3 hover:bg-indigo-700 rounded">เครื่องมือคำนวณ</button>
+            </div>
+            <button id="mobile-menu-btn" class="md:hidden p-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+            </button>
+        </div>
+        <!-- Mobile Menu -->
+        <div id="mobile-menu" class="md:hidden hidden bg-indigo-700 px-4 py-2">
+            <a href="{{ url_for('index') }}" class="block py-2 hover:bg-indigo-800 rounded px-2">รายชื่อผู้ป่วย</a>
+            <a href="{{ url_for('add_patient') }}" class="block py-2 hover:bg-indigo-800 rounded px-2">เพิ่มผู้ป่วย</a>
+            <a href="{{ url_for('add_vital') }}" class="block py-2 hover:bg-indigo-800 rounded px-2">บันทึกข้อมูลใหม่</a>
+            <button id="mobile-calculator-btn" class="block py-2 hover:bg-indigo-800 rounded px-2 w-full text-left">เครื่องมือคำนวณ</button>
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="container mx-auto px-4 mt-4">
+                {% for category, message in messages %}
+                    <div class="p-4 mb-4 {% if category == 'success' %}bg-green-100 text-green-700{% elif category == 'danger' %}bg-red-100 text-red-700{% else %}bg-blue-100 text-blue-700{% endif %} rounded">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- เครื่องมือคำนวณ -->
+    <div id="calculator-overlay" class="calculator-overlay"></div>
+    <div id="calculator-tool" class="calculator-tool">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium">เครื่องมือคำนวณ</h3>
+            <button id="close-calculator" class="text-gray-500 hover:text-gray-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- BMI Calculator -->
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h4 class="font-medium mb-2">คำนวณค่า BMI</h4>
+                <div class="space-y-2">
+                    <div>
+                        <label class="block text-sm text-gray-700">น้ำหนัก (กก.)</label>
+                        <input type="number" id="bmi-weight" class="w-full px-3 py-2 border rounded-md" placeholder="เช่น 65.5">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-700">ส่วนสูง (ซม.)</label>
+                        <input type="number" id="bmi-height" class="w-full px-3 py-2 border rounded-md" placeholder="เช่น 170">
+                    </div>
+                    <button id="calculate-bmi" class="w-full bg-indigo-600 text-white py-2 rounded-md hover:bg-indigo-700">คำนวณ</button>
+                    <div>
+                        <div class="mt-2 p-2 bg-gray-100 rounded-md">
+                            <p>BMI: <span id="bmi-result" class="font-bold">-</span></p>
+                            <p>แปลผล: <span id="bmi-interpretation" class="font-bold">-</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Drip Rate Calculator -->
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h4 class="font-medium mb-2">คำนวณหยดน้ำเกลือ (Drip Rate)</h4>
+                <div class="space-y-2">
+                    <div>
+                        <label class="block text-sm text-gray-700">ปริมาณสารน้ำ (มล.)</label>
+                        <input type="number" id="drip-volume" class="w-full px-3 py-2 border rounded-md" placeholder="เช่น 1000">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-700">เวลาที่ให้ (ชั่วโมง)</label>
+                        <input type="number" id="drip-hours" class="w-full px-3 py-2 border rounded-md" placeholder="เช่น 8">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-700">Drop factor (หยด/มล.)</label>
+                        <select id="drip-factor" class="w-full px-3 py-2 border rounded-md">
+                            <option value="15">15 หยด/มล. (Macro drip)</option>
+                            <option value="20">20 หยด/มล. (Macro drip)</option>
+                            <option value="60">60 หยด/มล. (Micro drip)</option>
+                        </select>
+                    </div>
+                    <button id="calculate-drip" class="w-full bg-indigo-600 text-white py-2 rounded-md hover:bg-indigo-700">คำนวณ</button>
+                    <div>
+                        <div class="mt-2 p-2 bg-gray-100 rounded-md">
+                            <p>อัตราการให้: <span id="drip-result" class="font-bold">-</span> หยด/นาที</p>
+                            <p>อัตรา ml/hr: <span id="ml-per-hour" class="font-bold">-</span> มล./ชม.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation สำหรับอุปกรณ์เคลื่อนที่ -->
+    <div class="bottom-nav justify-around">
+        <a href="{{ url_for('index') }}" class="flex flex-col items-center text-indigo-600">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7m-7-7v14" />
+            </svg>
+            <span class="text-xs">หน้าหลัก</span>
+        </a>
+        <a href="{{ url_for('add_patient') }}" class="flex flex-col items-center text-gray-600">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+            </svg>
+            <span class="text-xs">เพิ่มผู้ป่วย</span>
+        </a>
+        <a href="{{ url_for('add_vital') }}" class="flex flex-col items-center text-gray-600">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span class="text-xs">บันทึกข้อมูล</span>
+        </a>
+        <button id="mobile-tool-btn" class="flex flex-col items-center text-gray-600 bg-transparent border-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            </svg>
+            <span class="text-xs">เครื่องมือ</span>
+        </button>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-100 text-gray-600 py-4 mt-8 hidden md:block">
+        <div class="container mx-auto px-4 text-center">
+            <p>© 2025 ระบบบันทึก Vital Signs สำหรับพยาบาล</p>
+        </div>
+    </footer>
+    
+    <!-- JavaScript -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // เปิด-ปิดเมนูบนอุปกรณ์เคลื่อนที่
+            const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+            if (mobileMenuBtn) {
+                mobileMenuBtn.addEventListener('click', function() {
+                    const mobileMenu = document.getElementById('mobile-menu');
+                    if (mobileMenu) {
+                        mobileMenu.classList.toggle('hidden');
+                    }
+                });
+            }
+            
+            // เปิด-ปิดเครื่องมือคำนวณ
+            function toggleCalculator() {
+                console.log('Toggling calculator tool...');
+                const calculatorTool = document.getElementById('calculator-tool');
+                const calculatorOverlay = document.getElementById('calculator-overlay');
+                
+                if (calculatorTool && calculatorOverlay) {
+                    calculatorTool.classList.toggle('active');
+                    calculatorOverlay.classList.toggle('active');
+                    console.log('Calculator toggled:', calculatorTool.classList.contains('active'));
+                } else {
+                    console.error('Calculator elements not found!');
+                }
+            }
+            
+            // ผูกกับปุ่มต่างๆ
+            const calcButtons = [
+                document.getElementById('calculator-btn'),
+                document.getElementById('mobile-calculator-btn'),
+                document.getElementById('mobile-tool-btn'),
+                document.getElementById('close-calculator')
+            ];
+            
+            calcButtons.forEach(btn => {
+                if (btn) {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        toggleCalculator();
+                    });
+                }
+            });
+            
+            const calcOverlay = document.getElementById('calculator-overlay');
+            if (calcOverlay) {
+                calcOverlay.addEventListener('click', toggleCalculator);
+            }
+            
+            // คำนวณ BMI
+            const calcBmiBtn = document.getElementById('calculate-bmi');
+            if (calcBmiBtn) {
+                calcBmiBtn.addEventListener('click', function() {
+                    const weight = parseFloat(document.getElementById('bmi-weight').value);
+                    const height = parseFloat(document.getElementById('bmi-height').value);
+                    
+                    if (weight > 0 && height > 0) {
+                        const heightInMeters = height / 100;
+                        const bmi = weight / (heightInMeters * heightInMeters);
+                        
+                        const bmiResult = document.getElementById('bmi-result');
+                        const bmiInterpretation = document.getElementById('bmi-interpretation');
+                        
+                        if (bmiResult && bmiInterpretation) {
+                            bmiResult.textContent = bmi.toFixed(2);
+                            
+                            if (bmi < 18.5) {
+                                bmiInterpretation.textContent = "น้ำหนักน้อย/ผอม";
+                                bmiInterpretation.className = "font-bold text-blue-600";
+                            } else if (bmi < 23) {
+                                bmiInterpretation.textContent = "ปกติ";
+                                bmiInterpretation.className = "font-bold text-green-600";
+                            } else if (bmi < 25) {
+                                bmiInterpretation.textContent = "น้ำหนักเกิน";
+                                bmiInterpretation.className = "font-bold text-yellow-600";
+                            } else if (bmi < 30) {
+                                bmiInterpretation.textContent = "อ้วน";
+                                bmiInterpretation.className = "font-bold text-orange-600";
+                            } else {
+                                bmiInterpretation.textContent = "อ้วนมาก";
+                                bmiInterpretation.className = "font-bold text-red-600";
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // คำนวณอัตราการให้สารน้ำ
+            const calcDripBtn = document.getElementById('calculate-drip');
+            if (calcDripBtn) {
+                calcDripBtn.addEventListener('click', function() {
+                    const volume = parseFloat(document.getElementById('drip-volume').value);
+                    const hours = parseFloat(document.getElementById('drip-hours').value);
+                    const dropFactor = parseInt(document.getElementById('drip-factor').value);
+                    
+                    if (volume > 0 && hours > 0) {
+                        const mlPerHour = volume / hours;
+                        const dropsPerMinute = (mlPerHour * dropFactor) / 60;
+                        
+                        const dripResult = document.getElementById('drip-result');
+                        const mlPerHourResult = document.getElementById('ml-per-hour');
+                        
+                        if (dripResult && mlPerHourResult) {
+                            dripResult.textContent = Math.round(dropsPerMinute);
+                            mlPerHourResult.textContent = mlPerHour.toFixed(1);
+                        }
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

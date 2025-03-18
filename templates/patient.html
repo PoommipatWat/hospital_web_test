@@ -1,0 +1,499 @@
+{% extends "base.html" %}
+
+{% block title %}ข้อมูล Vital Signs - {{ patient_name }}{% endblock %}
+
+{% block content %}
+<!-- เพิ่ม Chart.js library -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+
+<div class="bg-white rounded-lg shadow-md p-6">
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-semibold text-gray-800">{{ patient_name }}</h1>
+            <p class="text-gray-600">รหัสผู้ป่วย: {{ patient_id }}</p>
+            <p class="text-gray-600">ห้อง: {{ room_number if room_number else 'ไม่ระบุ' }}</p>
+            {% if weight and height %}
+                <p class="text-gray-600">น้ำหนัก/ส่วนสูง: {{ weight }} กก. / {{ height }} ซม.</p>
+                {% if weight and height %}
+                    <p class="text-gray-600">BMI: {{ (weight / ((height/100) * (height/100)))|round(2) }} kg/m<sup>2</sup></p>
+                {% endif %}
+            {% endif %}
+        </div>
+        <div class="flex space-x-2">
+            <a href="{{ url_for('add_vital') }}" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                บันทึกข้อมูลใหม่
+            </a>
+            <a href="{{ url_for('export_patient_data', patient_id=patient_id) }}" class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                ดาวน์โหลด Excel
+            </a>
+        </div>
+    </div>
+
+    {% if vitals %}
+        <!-- แท็บสำหรับแสดงข้อมูลในรูปแบบต่างๆ -->
+        <div class="mb-4 border-b border-gray-200">
+            <ul class="flex flex-wrap -mb-px text-sm font-medium text-center">
+                <li class="mr-2">
+                    <a href="#" class="tab-link active inline-block p-4 border-b-2 border-indigo-600 rounded-t-lg text-indigo-600" data-target="table-view">ตารางข้อมูล</a>
+                </li>
+                <li class="mr-2">
+                    <a href="#" class="tab-link inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:text-gray-600 hover:border-gray-300" data-target="chart-view">กราฟแนวโน้ม</a>
+                </li>
+                <li class="mr-2">
+                    <a href="#" class="tab-link inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:text-gray-600 hover:border-gray-300" data-target="summary-view">สรุปภาพรวม</a>
+                </li>
+            </ul>
+        </div>
+        
+        <!-- เนื้อหาแท็บ: ตารางข้อมูล -->
+        <div id="table-view" class="tab-content">
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse vital-table">
+                    <thead>
+                        <tr class="bg-gray-100 border-b border-gray-200">
+                            <th class="text-left px-4 py-3">วันที่/เวลา</th>
+                            <th class="px-4 py-3">อุณหภูมิ (°C)<br><span class="text-xs text-gray-500">36.0-38.0</span></th>
+                            <th class="px-4 py-3">อัตราการเต้นของหัวใจ<br><span class="text-xs text-gray-500">60-100</span></th>
+                            <th class="px-4 py-3">ความดันโลหิต (mmHg)<br><span class="text-xs text-gray-500">90-140/60-90</span></th>
+                            <th class="px-4 py-3">อัตราการหายใจ<br><span class="text-xs text-gray-500">12-20</span></th>
+                            <th class="px-4 py-3">O₂ Saturation (%)<br><span class="text-xs text-gray-500">95-100</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for vital in vitals %}
+                        <tr class="border-b border-gray-200">
+                            <td class="text-left px-4 py-3 font-medium">
+                                <div>{{ format_date(vital.timestamp) }}</div>
+                                <div class="text-sm text-gray-500">{{ format_time(vital.timestamp) }}</div>
+                            </td>
+                            <td class="px-4 py-3 {{ get_vital_status(vital.temperature, 'temperature') }}">
+                                {{ vital.temperature }}
+                            </td>
+                            <td class="px-4 py-3 {{ get_vital_status(vital.heart_rate, 'heart_rate') }}">
+                                {{ vital.heart_rate }}
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="{{ get_vital_status(vital.blood_pressure_sys, 'blood_pressure_sys') }}">{{ vital.blood_pressure_sys }}</span>
+                                /
+                                <span class="{{ get_vital_status(vital.blood_pressure_dia, 'blood_pressure_dia') }}">{{ vital.blood_pressure_dia }}</span>
+                            </td>
+                            <td class="px-4 py-3 {{ get_vital_status(vital.respiratory_rate, 'respiratory_rate') }}">
+                                {{ vital.respiratory_rate }}
+                            </td>
+                            <td class="px-4 py-3 {{ get_vital_status(vital.oxygen_saturation, 'oxygen_saturation') }}">
+                                {{ vital.oxygen_saturation }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- เนื้อหาแท็บ: กราฟแนวโน้ม -->
+        <div id="chart-view" class="tab-content hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- กราฟอุณหภูมิ -->
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">อุณหภูมิ (°C)</h3>
+                    <canvas id="temperatureChart" height="200"></canvas>
+                </div>
+                
+                <!-- กราฟอัตราการเต้นของหัวใจ -->
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">อัตราการเต้นของหัวใจ (ครั้ง/นาที)</h3>
+                    <canvas id="heartRateChart" height="200"></canvas>
+                </div>
+                
+                <!-- กราฟความดันโลหิต -->
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">ความดันโลหิต (mmHg)</h3>
+                    <canvas id="bloodPressureChart" height="200"></canvas>
+                </div>
+                
+                <!-- กราฟอัตราการหายใจ -->
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">อัตราการหายใจ (ครั้ง/นาที)</h3>
+                    <canvas id="respiratoryRateChart" height="200"></canvas>
+                </div>
+                
+                <!-- กราฟออกซิเจนในเลือด -->
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">ความอิ่มตัวของออกซิเจนในเลือด (%)</h3>
+                    <canvas id="oxygenSaturationChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- เนื้อหาแท็บ: สรุปภาพรวม -->
+        <div id="summary-view" class="tab-content hidden">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- สรุปอุณหภูมิ -->
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">อุณหภูมิ</h3>
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-500">ล่าสุด:</span>
+                        <span class="{{ get_vital_status(vitals[0].temperature, 'temperature') }} font-bold">{{ vitals[0].temperature }} °C</span>
+                    </div>
+                    <div class="flex items-center justify-between mt-2">
+                        <span class="text-gray-500">ค่าเฉลี่ย:</span>
+                        <span class="font-bold">{{ (vitals|map(attribute='temperature')|sum / vitals|length)|round(1) }} °C</span>
+                    </div>
+                    <div class="flex items-center justify-between mt-2">
+                        <span class="text-gray-500">ต่ำสุด-สูงสุด:</span>
+                        <span class="font-bold">{{ vitals|map(attribute='temperature')|min }} - {{ vitals|map(attribute='temperature')|max }} °C</span>
+                    </div>
+                </div>
+                
+                <!-- สรุปอัตราการเต้นของหัวใจ -->
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">อัตราการเต้นของหัวใจ</h3>
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-500">ล่าสุด:</span>
+                        <span class="{{ get_vital_status(vitals[0].heart_rate, 'heart_rate') }} font-bold">{{ vitals[0].heart_rate }} ครั้ง/นาที</span>
+                    </div>
+                    <div class="flex items-center justify-between mt-2">
+                        <span class="text-gray-500">ค่าเฉลี่ย:</span>
+                        <span class="font-bold">{{ (vitals|map(attribute='heart_rate')|sum / vitals|length)|round(0) }} ครั้ง/นาที</span>
+                    </div>
+                    <div class="flex items-center justify-between mt-2">
+                        <span class="text-gray-500">ต่ำสุด-สูงสุด:</span>
+                        <span class="font-bold">{{ vitals|map(attribute='heart_rate')|min }} - {{ vitals|map(attribute='heart_rate')|max }} ครั้ง/นาที</span>
+                    </div>
+                </div>
+                
+                <!-- สรุปความดันโลหิต -->
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">ความดันโลหิต</h3>
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-500">ล่าสุด:</span>
+                        <span class="font-bold">
+                            <span class="{{ get_vital_status(vitals[0].blood_pressure_sys, 'blood_pressure_sys') }}">{{ vitals[0].blood_pressure_sys }}</span>
+                            /
+                            <span class="{{ get_vital_status(vitals[0].blood_pressure_dia, 'blood_pressure_dia') }}">{{ vitals[0].blood_pressure_dia }}</span>
+                            mmHg
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between mt-2">
+                        <span class="text-gray-500">ค่าเฉลี่ย:</span>
+                        <span class="font-bold">
+                            {{ (vitals|map(attribute='blood_pressure_sys')|sum / vitals|length)|round(0) }}
+                            /
+                            {{ (vitals|map(attribute='blood_pressure_dia')|sum / vitals|length)|round(0) }}
+                            mmHg
+                        </span>
+                    </div>
+                </div>
+                
+                <!-- สรุปอัตราการหายใจ -->
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">อัตราการหายใจ</h3>
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-500">ล่าสุด:</span>
+                        <span class="{{ get_vital_status(vitals[0].respiratory_rate, 'respiratory_rate') }} font-bold">{{ vitals[0].respiratory_rate }} ครั้ง/นาที</span>
+                    </div>
+                    <div class="flex items-center justify-between mt-2">
+                        <span class="text-gray-500">ค่าเฉลี่ย:</span>
+                        <span class="font-bold">{{ (vitals|map(attribute='respiratory_rate')|sum / vitals|length)|round(0) }} ครั้ง/นาที</span>
+                    </div>
+                    <div class="flex items-center justify-between mt-2">
+                        <span class="text-gray-500">ต่ำสุด-สูงสุด:</span>
+                        <span class="font-bold">{{ vitals|map(attribute='respiratory_rate')|min }} - {{ vitals|map(attribute='respiratory_rate')|max }} ครั้ง/นาที</span>
+                    </div>
+                </div>
+                
+                <!-- สรุปออกซิเจนในเลือด -->
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">ความอิ่มตัวของออกซิเจนในเลือด</h3>
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-500">ล่าสุด:</span>
+                        <span class="{{ get_vital_status(vitals[0].oxygen_saturation, 'oxygen_saturation') }} font-bold">{{ vitals[0].oxygen_saturation }} %</span>
+                    </div>
+                    <div class="flex items-center justify-between mt-2">
+                        <span class="text-gray-500">ค่าเฉลี่ย:</span>
+                        <span class="font-bold">{{ (vitals|map(attribute='oxygen_saturation')|sum / vitals|length)|round(0) }} %</span>
+                    </div>
+                    <div class="flex items-center justify-between mt-2">
+                        <span class="text-gray-500">ต่ำสุด-สูงสุด:</span>
+                        <span class="font-bold">{{ vitals|map(attribute='oxygen_saturation')|min }} - {{ vitals|map(attribute='oxygen_saturation')|max }} %</span>
+                    </div>
+                </div>
+                
+                <!-- แสดงข้อความแจ้งเตือน -->
+                <div class="md:col-span-3 p-4 rounded-lg {% if has_abnormal_values %}bg-red-50 border border-red-200{% else %}bg-green-50 border border-green-200{% endif %}">
+                    <h3 class="text-lg font-medium {% if has_abnormal_values %}text-red-700{% else %}text-green-700{% endif %} mb-2">
+                        {% if has_abnormal_values %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            พบค่าผิดปกติที่ต้องเฝ้าระวัง
+                        {% else %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            สัญญาณชีพอยู่ในเกณฑ์ปกติ
+                        {% endif %}
+                    </h3>
+                    <div>
+                        {% if abnormal_values %}
+                            <ul class="list-disc pl-5">
+                                {% for item in abnormal_values %}
+                                    <li>{{ item }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p>ค่า Vital Signs ทั้งหมดอยู่ในเกณฑ์ปกติ ไม่พบความผิดปกติที่ต้องเฝ้าระวัง</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-6 flex justify-between items-center text-sm text-gray-600">
+            <p>
+                <span class="inline-block w-3 h-3 bg-green-700 rounded-full mr-1"></span> ปกติ
+                <span class="inline-block w-3 h-3 bg-red-700 rounded-full ml-3 mr-1"></span> สูงกว่าปกติ
+                <span class="inline-block w-3 h-3 bg-blue-700 rounded-full ml-3 mr-1"></span> ต่ำกว่าปกติ
+            </p>
+            <p>อัพเดตล่าสุด: {{ format_datetime(vitals[0].timestamp) }}</p>
+        </div>
+        
+        <!-- JavaScript สำหรับสร้างกราฟ -->
+        <script>
+            // ข้อมูลสำหรับกราฟ
+            const labels = [
+                {% for vital in vitals|reverse %}
+                    "{{ format_date(vital.timestamp) }} {{ format_time(vital.timestamp) }}"{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ];
+            
+            const temperatureData = [
+                {% for vital in vitals|reverse %}
+                    {{ vital.temperature }}{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ];
+            
+            const heartRateData = [
+                {% for vital in vitals|reverse %}
+                    {{ vital.heart_rate }}{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ];
+            
+            const bpSysData = [
+                {% for vital in vitals|reverse %}
+                    {{ vital.blood_pressure_sys }}{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ];
+            
+            const bpDiaData = [
+                {% for vital in vitals|reverse %}
+                    {{ vital.blood_pressure_dia }}{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ];
+            
+            const respiratoryRateData = [
+                {% for vital in vitals|reverse %}
+                    {{ vital.respiratory_rate }}{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ];
+            
+            const oxygenSaturationData = [
+                {% for vital in vitals|reverse %}
+                    {{ vital.oxygen_saturation }}{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ];
+            
+            // กราฟอุณหภูมิ
+            const temperatureCtx = document.getElementById('temperatureChart').getContext('2d');
+            new Chart(temperatureCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'อุณหภูมิ (°C)',
+                        data: temperatureData,
+                        borderColor: 'rgb(75, 192, 192)',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            min: 35,
+                            max: 40,
+                            ticks: {
+                                stepSize: 0.5
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // กราฟอัตราการเต้นของหัวใจ
+            const heartRateCtx = document.getElementById('heartRateChart').getContext('2d');
+            new Chart(heartRateCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'อัตราการเต้นของหัวใจ (ครั้ง/นาที)',
+                        data: heartRateData,
+                        borderColor: 'rgb(255, 99, 132)',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            min: 40,
+                            max: 120,
+                            ticks: {
+                                stepSize: 10
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // กราฟความดันโลหิต
+            const bloodPressureCtx = document.getElementById('bloodPressureChart').getContext('2d');
+            new Chart(bloodPressureCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'ความดันโลหิตตัวบน (mmHg)',
+                        data: bpSysData,
+                        borderColor: 'rgb(153, 102, 255)',
+                        tension: 0.1,
+                        fill: false
+                    },
+                    {
+                        label: 'ความดันโลหิตตัวล่าง (mmHg)',
+                        data: bpDiaData,
+                        borderColor: 'rgb(255, 159, 64)',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            min: 40,
+                            max: 180,
+                            ticks: {
+                                stepSize: 20
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // กราฟอัตราการหายใจ
+            const respiratoryRateCtx = document.getElementById('respiratoryRateChart').getContext('2d');
+            new Chart(respiratoryRateCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'อัตราการหายใจ (ครั้ง/นาที)',
+                        data: respiratoryRateData,
+                        borderColor: 'rgb(54, 162, 235)',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            min: 8,
+                            max: 30,
+                            ticks: {
+                                stepSize: 2
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // กราฟออกซิเจนในเลือด
+            const oxygenSaturationCtx = document.getElementById('oxygenSaturationChart').getContext('2d');
+            new Chart(oxygenSaturationCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'ความอิ่มตัวของออกซิเจนในเลือด (%)',
+                        data: oxygenSaturationData,
+                        borderColor: 'rgb(255, 205, 86)',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            min: 90,
+                            max: 100,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // การสลับแท็บ
+            document.addEventListener('DOMContentLoaded', function() {
+                const tabLinks = document.querySelectorAll('.tab-link');
+                const tabContents = document.querySelectorAll('.tab-content');
+                
+                tabLinks.forEach(link => {
+                    link.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        
+                        // ลบคลาส active จากทุกแท็บ
+                        tabLinks.forEach(l => l.classList.remove('active', 'border-indigo-600', 'text-indigo-600'));
+                        tabLinks.forEach(l => l.classList.add('border-transparent'));
+                        
+                        // เพิ่มคลาส active ให้แท็บที่คลิก
+                        this.classList.add('active', 'border-indigo-600', 'text-indigo-600');
+                        this.classList.remove('border-transparent');
+                        
+                        // ซ่อนทุก tab content
+                        tabContents.forEach(content => content.classList.add('hidden'));
+                        
+                        // แสดง tab content ที่เกี่ยวข้อง
+                        const targetId = this.getAttribute('data-target');
+                        document.getElementById(targetId).classList.remove('hidden');
+                    });
+                });
+            });
+        </script>
+    {% else %}
+        <div class="text-center py-12 text-gray-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p class="text-xl mb-2">ยังไม่มีข้อมูล Vital Signs</p>
+            <p class="mb-6">กรุณาเพิ่มข้อมูล Vital Signs ใหม่สำหรับผู้ป่วยรายนี้</p>
+            <a href="{{ url_for('add_vital') }}" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
+                บันทึกข้อมูลใหม่
+            </a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
