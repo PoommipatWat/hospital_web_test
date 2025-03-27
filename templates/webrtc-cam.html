@@ -1,0 +1,518 @@
+{% extends "base.html" %}
+
+{% block title %}กล้อง WebRTC - ระบบบันทึก Vital Signs{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow-md p-6">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <h1 class="text-2xl font-semibold text-gray-800 mb-4 md:mb-0">WebRTC Camera</h1>
+        <div class="flex space-x-2">
+            <button id="start-button" class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                เริ่มกล้อง
+            </button>
+            <button id="stop-button" class="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                </svg>
+                หยุดกล้อง
+            </button>
+            <button id="capture-button" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                ถ่ายภาพ
+            </button>
+        </div>
+    </div>
+    
+    <!-- ตัวเลือกคุณภาพวิดีโอ -->
+    <div class="mb-4 bg-gray-100 p-3 rounded-lg">
+        <h3 class="text-sm font-medium text-gray-700 mb-2">ตั้งค่าคุณภาพวิดีโอ</h3>
+        <div class="flex items-center space-x-2">
+            <span class="text-xs text-gray-500">ต่ำ</span>
+            <input type="range" id="quality-slider" min="20" max="100" value="75" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+            <span class="text-xs text-gray-500">สูง</span>
+        </div>
+        <div class="flex justify-between mt-1">
+            <span class="text-xs text-gray-600">เร็วขึ้น/ขนาดเล็กลง</span>
+            <span class="text-xs text-gray-600">คมชัดขึ้น/หน่วงมากขึ้น</span>
+        </div>
+        <div class="mt-2 flex justify-between">
+            <div class="text-xs text-gray-700">ค่าปัจจุบัน: <span id="quality-value">75</span>%</div>
+            <button id="apply-quality" class="text-xs text-white bg-indigo-600 px-2 py-1 rounded hover:bg-indigo-700">บันทึกการตั้งค่า</button>
+        </div>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-gray-100 rounded-lg overflow-hidden">
+            <h2 class="text-lg font-medium text-gray-800 p-4 bg-gray-200">กล้องสด</h2>
+            <div class="relative">
+                <video id="remote-video" class="w-full h-auto bg-black" autoplay playsinline style="height: 360px;"></video>
+                <div id="camera-placeholder" class="absolute inset-0 flex items-center justify-center bg-gray-800 text-white">
+                    <div class="text-center p-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <p class="text-lg">กดปุ่ม "เริ่มกล้อง" เพื่อเริ่มแสดงภาพจากกล้อง</p>
+                    </div>
+                </div>
+                <div id="camera-loading" class="absolute inset-0 hidden items-center justify-center bg-black bg-opacity-70 text-white">
+                    <div class="text-center">
+                        <svg class="animate-spin h-10 w-10 mx-auto mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="text-lg">กำลังเชื่อมต่อกล้อง...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="p-3 bg-gray-200">
+                <div class="flex justify-between items-center">
+                    <div class="text-sm text-gray-600">
+                        <span id="conn-status">ยังไม่ได้เชื่อมต่อ</span>
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        FPS: <span id="fps-counter">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-gray-100 rounded-lg overflow-hidden">
+            <h2 class="text-lg font-medium text-gray-800 p-4 bg-gray-200">ภาพที่ถ่าย</h2>
+            <div class="relative">
+                <canvas id="captured-image" class="w-full h-auto bg-gray-900" style="height: 360px;"></canvas>
+                <div id="no-image-message" class="absolute inset-0 flex items-center justify-center text-white bg-gray-900 bg-opacity-70">
+                    <div class="text-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <p>ยังไม่มีภาพ กดปุ่ม "ถ่ายภาพ" เพื่อถ่ายภาพ</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 flex justify-end space-x-2">
+                <a id="download-link" download="patient-image.png" class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors hidden">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    ดาวน์โหลดภาพ
+                </a>
+                <button id="save-to-server" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors hidden">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                    บันทึกลงเซิร์ฟเวอร์
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- แสดงผลการบันทึกภาพ -->
+    <div id="save-result" class="mt-6 bg-green-50 p-4 rounded-lg hidden">
+        <div class="flex items-start">
+            <div class="flex-shrink-0 mt-0.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-lg font-medium text-green-800">บันทึกภาพสำเร็จ</h3>
+                <div class="mt-2 text-sm text-green-700">
+                    <p>ระบบได้บันทึกภาพถ่ายลงในเซิร์ฟเวอร์เรียบร้อยแล้ว</p>
+                    <p class="mt-1">
+                        <a id="saved-image-link" href="#" class="font-medium text-green-700 underline hover:text-green-600" target="_blank">
+                            ดูภาพที่บันทึกไว้
+                        </a>
+                    </p>
+                </div>
+            </div>
+            <div class="ml-auto pl-3">
+                <div class="-mx-1.5 -my-1.5">
+                    <button id="close-save-result" class="inline-flex rounded-md p-1.5 text-green-500 hover:bg-green-100">
+                        <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="mt-6 bg-blue-50 p-4 rounded-lg">
+        <h3 class="text-lg font-medium text-blue-800 mb-2">คำแนะนำ</h3>
+        <ul class="list-disc pl-5 text-blue-700">
+            <li>คลิกปุ่ม "เริ่มกล้อง" เพื่อเริ่มสตรีมวิดีโอผ่าน WebRTC</li>
+            <li>คลิกปุ่ม "ถ่ายภาพ" เพื่อจับภาพจากวิดีโอสตรีม</li>
+            <li>คลิกปุ่ม "หยุดกล้อง" เพื่อหยุดการสตรีมวิดีโอ</li>
+            <li>หากต้องการปรับคุณภาพวิดีโอ ให้ปรับตัวเลื่อนแล้วคลิก "บันทึกการตั้งค่า"</li>
+            <li>การใช้ WebRTC ทำให้การสตรีมวิดีโอมีประสิทธิภาพสูง ลดการหน่วงและให้คุณภาพที่ดีกว่า</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // DOM elements
+    const remoteVideo = document.getElementById('remote-video');
+    const cameraPlaceholder = document.getElementById('camera-placeholder');
+    const cameraLoading = document.getElementById('camera-loading');
+    const capturedImage = document.getElementById('captured-image');
+    const noImageMessage = document.getElementById('no-image-message');
+    const downloadLink = document.getElementById('download-link');
+    const saveToServerBtn = document.getElementById('save-to-server');
+    const saveResult = document.getElementById('save-result');
+    const savedImageLink = document.getElementById('saved-image-link');
+    const closeSaveResultBtn = document.getElementById('close-save-result');
+    const connStatus = document.getElementById('conn-status');
+    const fpsCounter = document.getElementById('fps-counter');
+    
+    // Buttons
+    const startButton = document.getElementById('start-button');
+    const stopButton = document.getElementById('stop-button');
+    const captureButton = document.getElementById('capture-button');
+    
+    // Quality settings
+    const qualitySlider = document.getElementById('quality-slider');
+    const qualityValue = document.getElementById('quality-value');
+    const applyQualityBtn = document.getElementById('apply-quality');
+    
+    // Variables
+    let peerConnection = null;
+    let frameCount = 0;
+    let lastFrameTime = 0;
+    let fpsInterval = null;
+    
+    // FPS calculation
+    function startFpsCounter() {
+        // Reset frame count
+        frameCount = 0;
+        lastFrameTime = performance.now();
+        
+        // Update FPS every second
+        fpsInterval = setInterval(() => {
+            const now = performance.now();
+            const elapsed = now - lastFrameTime;
+            const currentFps = Math.round((frameCount * 1000) / elapsed);
+            fpsCounter.textContent = currentFps;
+            
+            // Reset for next interval
+            frameCount = 0;
+            lastFrameTime = now;
+        }, 1000);
+    }
+    
+    function stopFpsCounter() {
+        if (fpsInterval) {
+            clearInterval(fpsInterval);
+            fpsInterval = null;
+        }
+        fpsCounter.textContent = '0';
+    }
+    
+    // ปรับขนาด canvas ให้ตรงกับขนาดของวิดีโอ
+    function adjustCanvasSize() {
+        capturedImage.width = remoteVideo.videoWidth || remoteVideo.offsetWidth;
+        capturedImage.height = remoteVideo.videoHeight || remoteVideo.offsetHeight;
+    }
+    
+    // เริ่มสตรีมวิดีโอ
+    async function startWebRTC() {
+        if (peerConnection) {
+            console.log('WebRTC already connected');
+            return;
+        }
+        
+        try {
+            // แสดงตัวโหลด
+            cameraLoading.style.display = 'flex';
+            cameraPlaceholder.style.display = 'none';
+            connStatus.textContent = 'กำลังเชื่อมต่อ...';
+            
+            // สร้าง peer connection
+            peerConnection = new RTCPeerConnection({
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' }
+                ]
+            });
+            
+            // สร้างข้อมูลสตรีมวิดีโอในฝั่งผู้ใช้
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: false
+            });
+            
+            // แสดงผลในวิดีโอท้องถิ่น (ถ้าต้องการ - ไม่จำเป็นในกรณีนี้)
+            // const localVideo = document.getElementById('local-video');
+            // if (localVideo) localVideo.srcObject = stream;
+            
+            // เตรียมการตรวจจับเฟรมสำหรับการคำนวณ FPS
+            remoteVideo.addEventListener('play', () => {
+                startFpsCounter();
+            });
+            
+            // นับจำนวนเฟรมที่ได้รับ
+            remoteVideo.addEventListener('timeupdate', () => {
+                frameCount++;
+            });
+            
+            // สร้าง offer
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            
+            // ส่ง offer ไปยังเซิร์ฟเวอร์
+            const response = await fetch('/webrtc-offer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    sdp: peerConnection.localDescription.sdp,
+                    type: peerConnection.localDescription.type,
+                }),
+            });
+            
+            // รับ answer จากเซิร์ฟเวอร์
+            const answerData = await response.json();
+            const answerDesc = new RTCSessionDescription(answerData);
+            await peerConnection.setRemoteDescription(answerDesc);
+            
+            // จัดการสตรีมที่ได้รับจากเซิร์ฟเวอร์
+            peerConnection.ontrack = function(event) {
+                if (event.streams && event.streams[0]) {
+                    remoteVideo.srcObject = event.streams[0];
+                    cameraLoading.style.display = 'none';
+                    connStatus.textContent = 'เชื่อมต่อแล้ว';
+                }
+            };
+            
+            // แสดงสถานะการเชื่อมต่อ ICE
+            peerConnection.oniceconnectionstatechange = function() {
+                connStatus.textContent = 'ICE: ' + peerConnection.iceConnectionState;
+                
+                if (peerConnection.iceConnectionState === 'connected' || 
+                    peerConnection.iceConnectionState === 'completed') {
+                    // เชื่อมต่อสำเร็จ
+                    cameraLoading.style.display = 'none';
+                    connStatus.textContent = 'เชื่อมต่อแล้ว';
+                    
+                    // เปิดใช้งานปุ่มต่างๆ
+                    startButton.disabled = true;
+                    stopButton.disabled = false;
+                    captureButton.disabled = false;
+                }
+                else if (peerConnection.iceConnectionState === 'failed' || 
+                         peerConnection.iceConnectionState === 'disconnected' || 
+                         peerConnection.iceConnectionState === 'closed') {
+                    // การเชื่อมต่อล้มเหลวหรือถูกตัด
+                    connStatus.textContent = 'การเชื่อมต่อล้มเหลว';
+                    stopWebRTC();
+                }
+            };
+            
+        } catch (error) {
+            console.error('เกิดข้อผิดพลาด:', error);
+            cameraLoading.style.display = 'none';
+            cameraPlaceholder.style.display = 'flex';
+            connStatus.textContent = 'เกิดข้อผิดพลาด';
+            alert('ไม่สามารถเชื่อมต่อกล้องได้: ' + error.message);
+            stopWebRTC();
+        }
+    }
+    
+    // หยุดสตรีมวิดีโอ
+    function stopWebRTC() {
+        if (peerConnection) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+        
+        // หยุดการแสดงวิดีโอ
+        if (remoteVideo.srcObject) {
+            const tracks = remoteVideo.srcObject.getTracks();
+            tracks.forEach(track => track.stop());
+            remoteVideo.srcObject = null;
+        }
+        
+        // หยุดการคำนวณ FPS
+        stopFpsCounter();
+        
+        // แสดงพื้นที่ว่างแทนวิดีโอ
+        cameraPlaceholder.style.display = 'flex';
+        cameraLoading.style.display = 'none';
+        connStatus.textContent = 'ยังไม่ได้เชื่อมต่อ';
+        
+        // ปิดใช้งานปุ่มต่างๆ
+        startButton.disabled = false;
+        stopButton.disabled = true;
+        captureButton.disabled = true;
+    }
+    
+    // จับภาพจากวิดีโอ
+    function captureImage() {
+        if (!remoteVideo.srcObject) {
+            alert('กรุณาเปิดกล้องก่อนถ่ายภาพ');
+            return;
+        }
+        
+        // ปรับขนาด canvas ให้ตรงกับวิดีโอ
+        adjustCanvasSize();
+        
+        // วาดภาพจากวิดีโอลงใน canvas
+        const context = capturedImage.getContext('2d');
+        context.drawImage(remoteVideo, 0, 0, capturedImage.width, capturedImage.height);
+        
+        // ซ่อนข้อความ "ยังไม่มีภาพ" และแสดงลิงก์ดาวน์โหลด
+        noImageMessage.style.display = 'none';
+        downloadLink.classList.remove('hidden');
+        saveToServerBtn.classList.remove('hidden');
+        
+        // อัปเดตลิงก์ดาวน์โหลด
+        try {
+            const imageDataUrl = capturedImage.toDataURL('image/png');
+            downloadLink.href = imageDataUrl;
+            
+            // กำหนดชื่อไฟล์ให้มีวันที่และเวลาปัจจุบัน
+            const now = new Date();
+            const timestamp = now.getFullYear() + 
+                              ('0' + (now.getMonth() + 1)).slice(-2) + 
+                              ('0' + now.getDate()).slice(-2) + '_' +
+                              ('0' + now.getHours()).slice(-2) + 
+                              ('0' + now.getMinutes()).slice(-2) + 
+                              ('0' + now.getSeconds()).slice(-2);
+            
+            downloadLink.setAttribute('download', `patient_image_${timestamp}.png`);
+        } catch (error) {
+            console.error('ไม่สามารถแปลงภาพได้:', error);
+            alert('เกิดข้อผิดพลาดในการถ่ายภาพ โปรดลองอีกครั้ง');
+        }
+    }
+    
+    // บันทึกภาพลงเซิร์ฟเวอร์
+    function saveImageToServer() {
+        if (noImageMessage.style.display !== 'none') {
+            alert('กรุณาถ่ายภาพก่อนบันทึกลงเซิร์ฟเวอร์');
+            return;
+        }
+        
+        // แสดงข้อความรอสักครู่
+        saveToServerBtn.disabled = true;
+        saveToServerBtn.innerHTML = `
+            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            กำลังบันทึก...
+        `;
+        
+        // ใช้ API ใหม่สำหรับจับภาพจากเว็บแคม
+        fetch('/capture-webcam', {
+            method: 'POST',
+            headers: {
+'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                // ถ้ามีรหัสผู้ป่วย สามารถส่งไปด้วย
+                // patient_id: '123456'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // คืนค่าปุ่มกลับสู่สถานะปกติ
+            saveToServerBtn.disabled = false;
+            saveToServerBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                </svg>
+                บันทึกลงเซิร์ฟเวอร์
+            `;
+            
+            if (data.success) {
+                // แสดงผลการบันทึกสำเร็จ
+                savedImageLink.href = data.url;
+                savedImageLink.textContent = data.filename;
+                saveResult.classList.remove('hidden');
+            } else {
+                // แสดงข้อความผิดพลาด
+                alert('เกิดข้อผิดพลาดในการบันทึกภาพ: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('เกิดข้อผิดพลาด:', error);
+            alert('เกิดข้อผิดพลาดในการบันทึกภาพ โปรดลองอีกครั้ง');
+            
+            // คืนค่าปุ่มกลับสู่สถานะปกติ
+            saveToServerBtn.disabled = false;
+            saveToServerBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                </svg>
+                บันทึกลงเซิร์ฟเวอร์
+            `;
+        });
+    }
+    
+    // ตั้งค่าคุณภาพวิดีโอ
+    function setVideoQuality() {
+        const quality = qualitySlider.value;
+        
+        // ส่งค่าคุณภาพไปยังเซิร์ฟเวอร์
+        fetch('/set-camera-quality', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                quality: parseInt(quality)
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`ตั้งค่าคุณภาพเป็น ${quality}% สำเร็จ`);
+            } else {
+                alert('ไม่สามารถตั้งค่าคุณภาพได้: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('เกิดข้อผิดพลาด:', error);
+            alert('ไม่สามารถตั้งค่าคุณภาพได้ โปรดลองอีกครั้ง');
+        });
+    }
+    
+    // ปิดกล่องข้อความผลการบันทึก
+    function closeResultMessage() {
+        saveResult.classList.add('hidden');
+    }
+    
+    // เพิ่ม event listeners
+    startButton.addEventListener('click', startWebRTC);
+    stopButton.addEventListener('click', stopWebRTC);
+    captureButton.addEventListener('click', captureImage);
+    saveToServerBtn.addEventListener('click', saveImageToServer);
+    closeSaveResultBtn.addEventListener('click', closeResultMessage);
+    
+    // อัปเดตค่าที่แสดงเมื่อเลื่อนตัวเลื่อน
+    qualitySlider.addEventListener('input', function() {
+        qualityValue.textContent = this.value;
+    });
+    
+    // บันทึกการตั้งค่าคุณภาพวิดีโอ
+    applyQualityBtn.addEventListener('click', setVideoQuality);
+    
+    // ปรับขนาด canvas เมื่อหน้าต่างเปลี่ยนขนาด
+    window.addEventListener('resize', adjustCanvasSize);
+    
+    // เรียกใช้ adjustCanvasSize เมื่อโหลดหน้าเว็บ
+    adjustCanvasSize();
+});
+</script>
+<script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+{% endblock %}

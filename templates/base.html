@@ -10,6 +10,8 @@
     <title>{% block title %}ระบบบันทึก Vital Signs{% endblock %}</title>
     <!-- ใช้ Tailwind CSS จาก CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Socket.io -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.min.js"></script>
     <!-- ใช้ Font ภาษาไทยที่อ่านง่าย -->
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -31,41 +33,16 @@
         
         /* UI สำหรับอุปกรณ์เคลื่อนที่ */
         @media (max-width: 640px) {
-            .vital-table {
-                font-size: 0.85rem;
-            }
-            
-            .vital-table th, .vital-table td {
-                padding: 6px 4px;
-            }
-            
-            /* ปรับขนาดปุ่มให้เหมาะสมกับการสัมผัส */
-            button, .btn, a.btn, input[type="submit"] {
-                min-height: 44px;
-                min-width: 44px;
-            }
-            
-            /* ปรับช่องว่างให้ UI สวยงาม */
-            .px-4 {
-                padding-left: 0.75rem;
-                padding-right: 0.75rem;
-            }
-            
-            /* ปรับขนาดฟอนต์ให้เหมาะสม */
-            h1 {
-                font-size: 1.5rem;
-            }
-            
-            h2 {
-                font-size: 1.25rem;
-            }
-            
-            .text-sm {
-                font-size: 0.8rem;
-            }
+            .vital-table { font-size: 0.85rem; }
+            .vital-table th, .vital-table td { padding: 6px 4px; }
+            button, .btn, a.btn, input[type="submit"] { min-height: 44px; min-width: 44px; }
+            .px-4 { padding-left: 0.75rem; padding-right: 0.75rem; }
+            h1 { font-size: 1.5rem; }
+            h2 { font-size: 1.25rem; }
+            .text-sm { font-size: 0.8rem; }
         }
         
-        /* ปรับการแสดงผลเพื่อหลีกเลี่ยงการซ้อนทับและเพิ่มความสะดวกในการใช้งาน */
+        /* Bottom Navigation */
         .bottom-nav {
             position: fixed;
             bottom: 0;
@@ -79,16 +56,13 @@
         }
         
         @media (max-width: 640px) {
-            .bottom-nav {
-                display: flex;
-            }
-            
-            main {
-                padding-bottom: 5rem;
-            }
+            .bottom-nav { display: flex; justify-content: space-around; }
+            main { padding-bottom: 6rem; }
+            .navbar-mobile-title { position: absolute; width: 100%; text-align: center; left: 0; z-index: -1; }
+            .mobile-page-title { text-align: center; }
         }
         
-        /* สไตล์สำหรับเครื่องมือคำนวณ */
+        /* Calculator Tool */
         .calculator-tool {
             position: fixed;
             bottom: 0;
@@ -105,9 +79,7 @@
             overflow-y: auto;
         }
         
-        .calculator-tool.active {
-            transform: translateY(0);
-        }
+        .calculator-tool.active { transform: translateY(0); }
         
         .calculator-overlay {
             position: fixed;
@@ -122,27 +94,98 @@
             display: none;
         }
         
-        .calculator-overlay.active {
-            opacity: 1;
-            display: block;
+        .calculator-overlay.active { opacity: 1; display: block; }
+
+        /* Battery Status */
+        .battery-status { padding: 0.5rem; }
+        .battery-icon {
+            position: relative;
+            width: 2rem;
+            height: 1rem;
+            border: 1px solid #4b5563;
+            border-radius: 2px;
+            background: white;
         }
+        .battery-icon::before {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            right: 2px;
+            bottom: 2px;
+        }
+        #battery-level {
+            height: 100%;
+            border-radius: 1px;
+            transition: width 0.3s ease, background-color 0.3s ease;
+        }
+        .battery-icon::after {
+            content: '';
+            position: absolute;
+            right: -4px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 6px;
+            background: #4b5563;
+        }
+        .battery-low { background-color: #ef4444; }
+        .battery-medium { background-color: #f59e0b; }
+        .battery-high { background-color: #22c55e; }
     </style>
+    <!-- Inline script เพื่อตั้งค่าเริ่มต้นทันที -->
+    <script>
+        function setInitialBatteryStatus() {
+            const savedBattery = localStorage.getItem('batteryPercentage');
+            if (savedBattery !== null) {
+                const percentage = Math.max(0, Math.min(100, parseFloat(savedBattery)));
+                document.addEventListener('DOMContentLoaded', function() {
+                    const batteryLevel = document.getElementById('battery-level');
+                    const batteryPercentage = document.getElementById('battery-percentage');
+                    if (batteryLevel && batteryPercentage) {
+                        batteryLevel.style.width = `${percentage}%`;
+                        batteryPercentage.textContent = `${Math.round(percentage)}%`;
+                        batteryLevel.classList.remove('battery-low', 'battery-medium', 'battery-high');
+                        if (percentage <= 20) {
+                            batteryLevel.classList.add('battery-low');
+                        } else if (percentage <= 50) {
+                            batteryLevel.classList.add('battery-medium');
+                        } else {
+                            batteryLevel.classList.add('battery-high');
+                        }
+                    }
+                });
+            }
+        }
+        setInitialBatteryStatus();
+    </script>
 </head>
 <body class="bg-gray-50">
     <!-- Navbar -->
     <nav class="bg-indigo-600 text-white shadow-md">
         <div class="container mx-auto px-4 py-3 flex justify-between items-center">
-            <a href="{{ url_for('index') }}" class="text-xl font-semibold flex items-center">
+            <a href="{{ url_for('index') }}" class="text-xl font-semibold flex items-center whitespace-nowrap">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                 </svg>
-                ระบบบันทึก Vital Signs
+                <span class="whitespace-nowrap">ระบบบันทึก Vital Signs</span>
             </a>
-            <div class="hidden md:flex space-x-4">
-                <a href="{{ url_for('index') }}" class="py-2 px-3 hover:bg-indigo-700 rounded">รายชื่อผู้ป่วย</a>
-                <a href="{{ url_for('add_patient') }}" class="py-2 px-3 hover:bg-indigo-700 rounded">เพิ่มผู้ป่วย</a>
-                <a href="{{ url_for('add_vital') }}" class="py-2 px-3 hover:bg-indigo-700 rounded">บันทึกข้อมูลใหม่</a>
-                <button id="calculator-btn" class="py-2 px-3 hover:bg-indigo-700 rounded">เครื่องมือคำนวณ</button>
+            <div class="flex items-center space-x-4">
+                <div class="hidden md:flex space-x-4">
+                    <a href="{{ url_for('index') }}" class="py-2 px-3 hover:bg-indigo-700 rounded">รายชื่อผู้ป่วย</a>
+                    <a href="{{ url_for('add_patient') }}" class="py-2 px-3 hover:bg-indigo-700 rounded">เพิ่มผู้ป่วย</a>
+                    <a href="{{ url_for('add_vital') }}" class="py-2 px-3 hover:bg-indigo-700 rounded">บันทึกข้อมูลใหม่</a>
+                    <a href="{{ url_for('robot_control') }}" class="py-2 px-3 hover:bg-indigo-700 rounded">ควบคุมหุ่นยนต์</a>
+                    <!-- <button id="calculator-btn" class="py-2 px-3 hover:bg-indigo-700 rounded">เครื่องมือคำนวณ</button> -->
+                </div>
+                <!-- Battery Status -->
+                <!-- แก้ไขส่วนแสดงผลแบตเตอรี่ -->
+                <div class="battery-status flex items-center space-x-2">
+                    <div class="battery-icon relative">
+                        <div id="battery-level" class="h-full" style="width: 0%"></div>
+                    </div>
+                    <span id="battery-percentage" class="text-sm font-medium w-3 text-right">0%</span>
+                </div>
             </div>
             <button id="mobile-menu-btn" class="md:hidden p-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -155,6 +198,7 @@
             <a href="{{ url_for('index') }}" class="block py-2 hover:bg-indigo-800 rounded px-2">รายชื่อผู้ป่วย</a>
             <a href="{{ url_for('add_patient') }}" class="block py-2 hover:bg-indigo-800 rounded px-2">เพิ่มผู้ป่วย</a>
             <a href="{{ url_for('add_vital') }}" class="block py-2 hover:bg-indigo-800 rounded px-2">บันทึกข้อมูลใหม่</a>
+            <a href="{{ url_for('robot_control') }}" class="block py-2 hover:bg-indigo-800 rounded px-2">ควบคุมด้วยมือ</a>
             <button id="mobile-calculator-btn" class="block py-2 hover:bg-indigo-800 rounded px-2 w-full text-left">เครื่องมือคำนวณ</button>
         </div>
     </nav>
@@ -177,7 +221,7 @@
         {% block content %}{% endblock %}
     </main>
 
-    <!-- เครื่องมือคำนวณ -->
+    <!-- Calculator Tool -->
     <div id="calculator-overlay" class="calculator-overlay"></div>
     <div id="calculator-tool" class="calculator-tool">
         <div class="flex justify-between items-center mb-4">
@@ -188,7 +232,6 @@
                 </svg>
             </button>
         </div>
-        
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <!-- BMI Calculator -->
             <div class="bg-white p-4 rounded-lg shadow">
@@ -203,15 +246,12 @@
                         <input type="number" id="bmi-height" class="w-full px-3 py-2 border rounded-md" placeholder="เช่น 170">
                     </div>
                     <button id="calculate-bmi" class="w-full bg-indigo-600 text-white py-2 rounded-md hover:bg-indigo-700">คำนวณ</button>
-                    <div>
-                        <div class="mt-2 p-2 bg-gray-100 rounded-md">
-                            <p>BMI: <span id="bmi-result" class="font-bold">-</span></p>
-                            <p>แปลผล: <span id="bmi-interpretation" class="font-bold">-</span></p>
-                        </div>
+                    <div class="mt-2 p-2 bg-gray-100 rounded-md">
+                        <p>BMI: <span id="bmi-result" class="font-bold">-</span></p>
+                        <p>แปลผล: <span id="bmi-interpretation" class="font-bold">-</span></p>
                     </div>
                 </div>
             </div>
-            
             <!-- Drip Rate Calculator -->
             <div class="bg-white p-4 rounded-lg shadow">
                 <h4 class="font-medium mb-2">คำนวณหยดน้ำเกลือ (Drip Rate)</h4>
@@ -233,19 +273,16 @@
                         </select>
                     </div>
                     <button id="calculate-drip" class="w-full bg-indigo-600 text-white py-2 rounded-md hover:bg-indigo-700">คำนวณ</button>
-                    <div>
-                        <div class="mt-2 p-2 bg-gray-100 rounded-md">
-                            <p>อัตราการให้: <span id="drip-result" class="font-bold">-</span> หยด/นาที</p>
-                            <p>อัตรา ml/hr: <span id="ml-per-hour" class="font-bold">-</span> มล./ชม.</p>
-                        </div>
+                    <div class="mt-2 p-2 bg-gray-100 rounded-md">
+                        <p>อัตราการให้: <span id="drip-result" class="font-bold">-</span> หยด/นาที</p>
+                        <p>อัตรา ml/hr: <span id="ml-per-hour" class="font-bold">-</span> มล./ชม.</p>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Bottom Navigation สำหรับอุปกรณ์เคลื่อนที่ -->
-    <div class="bottom-nav justify-around">
+    <div class="bottom-nav">
         <a href="{{ url_for('index') }}" class="flex flex-col items-center text-indigo-600">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7m-7-7v14" />
@@ -264,6 +301,12 @@
             </svg>
             <span class="text-xs">บันทึกข้อมูล</span>
         </a>
+        <a href="{{ url_for('robot_control') }}" class="flex flex-col items-center text-gray-600">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            <span class="text-xs">ควบคุม</span>
+        </a>
         <button id="mobile-tool-btn" class="flex flex-col items-center text-gray-600 bg-transparent border-0">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
@@ -271,82 +314,64 @@
             <span class="text-xs">เครื่องมือ</span>
         </button>
     </div>
-
     <!-- Footer -->
     <footer class="bg-gray-100 text-gray-600 py-4 mt-8 hidden md:block">
         <div class="container mx-auto px-4 text-center">
             <p>© 2025 ระบบบันทึก Vital Signs สำหรับพยาบาล</p>
         </div>
     </footer>
-    
+
     <!-- JavaScript -->
     <script>
+        // เชื่อมต่อ Socket.io (ปรับ URL ตาม server ของคุณ)
+        const socket = io();
+    
         document.addEventListener('DOMContentLoaded', function() {
-            // เปิด-ปิดเมนูบนอุปกรณ์เคลื่อนที่
+            // Mobile Menu Toggle
             const mobileMenuBtn = document.getElementById('mobile-menu-btn');
             if (mobileMenuBtn) {
                 mobileMenuBtn.addEventListener('click', function() {
                     const mobileMenu = document.getElementById('mobile-menu');
-                    if (mobileMenu) {
-                        mobileMenu.classList.toggle('hidden');
-                    }
+                    if (mobileMenu) mobileMenu.classList.toggle('hidden');
                 });
             }
-            
-            // เปิด-ปิดเครื่องมือคำนวณ
+    
+            // Calculator Toggle
             function toggleCalculator() {
-                console.log('Toggling calculator tool...');
                 const calculatorTool = document.getElementById('calculator-tool');
                 const calculatorOverlay = document.getElementById('calculator-overlay');
-                
                 if (calculatorTool && calculatorOverlay) {
                     calculatorTool.classList.toggle('active');
                     calculatorOverlay.classList.toggle('active');
-                    console.log('Calculator toggled:', calculatorTool.classList.contains('active'));
-                } else {
-                    console.error('Calculator elements not found!');
                 }
             }
-            
-            // ผูกกับปุ่มต่างๆ
+    
             const calcButtons = [
                 document.getElementById('calculator-btn'),
                 document.getElementById('mobile-calculator-btn'),
                 document.getElementById('mobile-tool-btn'),
                 document.getElementById('close-calculator')
             ];
-            
             calcButtons.forEach(btn => {
-                if (btn) {
-                    btn.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        toggleCalculator();
-                    });
-                }
+                if (btn) btn.addEventListener('click', toggleCalculator);
             });
-            
+    
             const calcOverlay = document.getElementById('calculator-overlay');
-            if (calcOverlay) {
-                calcOverlay.addEventListener('click', toggleCalculator);
-            }
-            
-            // คำนวณ BMI
+            if (calcOverlay) calcOverlay.addEventListener('click', toggleCalculator);
+    
+            // BMI Calculation
             const calcBmiBtn = document.getElementById('calculate-bmi');
             if (calcBmiBtn) {
                 calcBmiBtn.addEventListener('click', function() {
                     const weight = parseFloat(document.getElementById('bmi-weight').value);
                     const height = parseFloat(document.getElementById('bmi-height').value);
-                    
                     if (weight > 0 && height > 0) {
                         const heightInMeters = height / 100;
                         const bmi = weight / (heightInMeters * heightInMeters);
-                        
                         const bmiResult = document.getElementById('bmi-result');
                         const bmiInterpretation = document.getElementById('bmi-interpretation');
-                        
                         if (bmiResult && bmiInterpretation) {
                             bmiResult.textContent = bmi.toFixed(2);
-                            
                             if (bmi < 18.5) {
                                 bmiInterpretation.textContent = "น้ำหนักน้อย/ผอม";
                                 bmiInterpretation.className = "font-bold text-blue-600";
@@ -367,22 +392,19 @@
                     }
                 });
             }
-            
-            // คำนวณอัตราการให้สารน้ำ
+    
+            // Drip Rate Calculation
             const calcDripBtn = document.getElementById('calculate-drip');
             if (calcDripBtn) {
                 calcDripBtn.addEventListener('click', function() {
                     const volume = parseFloat(document.getElementById('drip-volume').value);
                     const hours = parseFloat(document.getElementById('drip-hours').value);
                     const dropFactor = parseInt(document.getElementById('drip-factor').value);
-                    
                     if (volume > 0 && hours > 0) {
                         const mlPerHour = volume / hours;
                         const dropsPerMinute = (mlPerHour * dropFactor) / 60;
-                        
                         const dripResult = document.getElementById('drip-result');
                         const mlPerHourResult = document.getElementById('ml-per-hour');
-                        
                         if (dripResult && mlPerHourResult) {
                             dripResult.textContent = Math.round(dropsPerMinute);
                             mlPerHourResult.textContent = mlPerHour.toFixed(1);
@@ -390,6 +412,70 @@
                     }
                 });
             }
+    
+            // Battery Status Update
+            function updateBatteryStatus(percentage) {
+                const batteryLevel = document.getElementById('battery-level');
+                const batteryPercentage = document.getElementById('battery-percentage');
+                if (batteryLevel && batteryPercentage) {
+                    percentage = Math.max(0, Math.min(100, percentage));
+                    batteryLevel.style.width = `${percentage}%`;
+                    batteryPercentage.textContent = `${Math.round(percentage)}%`;
+                    
+                    // ลบคลาสสีทั้งหมด
+                    batteryLevel.classList.remove('battery-low', 'battery-medium', 'battery-high', 'bg-green-500');
+                    
+                    let r, g, b;
+                    
+                    // แดง (0-25%) -> ส้ม/เหลือง (25-50%) -> เขียวอ่อน (50-75%) -> เขียวเข้ม (75-100%)
+                    if (percentage <= 25) {
+                        // แดง -> ส้ม: r: 255, g: 0->150, b: 0
+                        r = 255;
+                        g = Math.floor((percentage / 25) * 150);
+                        b = 0;
+                    } else if (percentage <= 50) {
+                        // ส้ม -> เหลือง: r: 255, g: 150->255, b: 0
+                        r = 255;
+                        g = Math.floor(150 + ((percentage - 25) / 25) * 105);
+                        b = 0;
+                    } else if (percentage <= 75) {
+                        // เหลือง -> เขียวอ่อน: r: 255->100, g: 255, b: 0
+                        r = Math.floor(255 - ((percentage - 50) / 25) * 155);
+                        g = 255;
+                        b = 0;
+                    } else {
+                        // เขียวอ่อน -> เขียวเข้ม: r: 100->0, g: 255->200, b: 0->0
+                        r = Math.floor(100 - ((percentage - 75) / 25) * 100);
+                        g = Math.floor(255 - ((percentage - 75) / 25) * 55);
+                        b = 0;
+                    }
+                    
+                    // กำหนดสีโดยตรง
+                    batteryLevel.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+
+                }
+            }
+            // โหลดค่าเริ่มต้นจาก localStorage เมื่อหน้าโหลด
+            const savedBattery = localStorage.getItem('batteryPercentage');
+            if (savedBattery !== null) {
+                updateBatteryStatus(parseFloat(savedBattery));
+            }
+    
+            // Receive ROS Battery Message
+            socket.on('ros_battery_message', function(message) {
+                try {
+                    const batteryValue = parseFloat(message.data);
+                    if (!isNaN(batteryValue)) {
+                        updateBatteryStatus(batteryValue);
+                        localStorage.setItem('batteryPercentage', batteryValue);
+                    }
+                } catch (error) {
+                    console.error('Error processing battery message:', error);
+                }
+            });
+    
+            // Initial test value (remove in production)
+            // updateBatteryStatus(75);
         });
     </script>
 </body>

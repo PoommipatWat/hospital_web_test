@@ -20,105 +20,111 @@
                 <div class="mb-4">
                     <label for="patient_id" class="block text-sm font-medium text-gray-700 mb-1">รหัสผู้ป่วย</label>
                     <select id="patient_id" name="patient_id" class="select2 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required onchange="updatePatientName(this.value)">
-                        <option value="">-- เลือกผู้ป่วย --</option>
-                        {% for patient_id, patient_name, room_number, weight, height in patients %}
-                            <option value="{{ patient_id }}" data-name="{{ patient_name }}" data-room="{{ room_number }}">
-                                {{ patient_id }} - {{ patient_name }} {% if room_number %}(ห้อง: {{ room_number }}){% endif %}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
-                <div class="mb-4">
-                    <label for="patient_name" class="block text-sm font-medium text-gray-700 mb-1">ชื่อ-นามสกุล</label>
-                    <input type="text" id="patient_name" name="patient_name" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required readonly>
-                </div>
-                
-                <div>
-                    <label for="timestamp" class="block text-sm font-medium text-gray-700 mb-1">วันเวลาที่บันทึก (เวลาประเทศไทย)</label>
-                    <input type="text" id="timestamp" class="w-full rounded-md border-gray-300 bg-gray-100 shadow-sm" value="{{ format_datetime(datetime.now() + timedelta(hours=7)) }}" readonly>
-                </div>
+                        <option value="">-- เลือกผู้ป่วย --</option>{% for patient_id, patient_name, room_number, weight, height in patients %}
+                        <option value="{{ patient_id }}" data-name="{{ patient_name }}" data-room="{{ room_number }}" {% if selected_patient and selected_patient[0] == patient_id %}selected{% endif %}>
+                            {{ patient_id }} - {{ patient_name }} {% if room_number %}(ห้อง: {{ room_number }}){% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
             </div>
             
-            <!-- Vital Signs -->
-            <div class="bg-green-50 rounded-lg p-4">
-                <h2 class="text-lg font-medium text-green-800 mb-4">Vital Signs</h2>
-                
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div class="mb-4">
-                        <label for="temperature" class="block text-sm font-medium text-gray-700 mb-1">อุณหภูมิ (°C)</label>
-                        <input type="number" id="temperature" name="temperature" step="0.1" min="30" max="45" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required placeholder="36.5">
-                        <p class="text-xs text-gray-500 mt-1">ค่าปกติ: 36.0 - 38.0</p>
-                    </div>
-                    
-                    <div class="mb-4">
-                        <label for="heart_rate" class="block text-sm font-medium text-gray-700 mb-1">อัตราการเต้นของหัวใจ (ครั้ง/นาที)</label>
-                        <input type="number" id="heart_rate" name="heart_rate" min="30" max="200" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required placeholder="80">
-                        <p class="text-xs text-gray-500 mt-1">ค่าปกติ: 60 - 100</p>
-                    </div>
-                    
-                    <div class="mb-4">
-                        <label for="blood_pressure_sys" class="block text-sm font-medium text-gray-700 mb-1">ความดันโลหิตตัวบน (mmHg)</label>
-                        <input type="number" id="blood_pressure_sys" name="blood_pressure_sys" min="60" max="250" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required placeholder="120">
-                        <p class="text-xs text-gray-500 mt-1">ค่าปกติ: 90 - 140</p>
-                    </div>
-                    
-                    <div class="mb-4">
-                        <label for="blood_pressure_dia" class="block text-sm font-medium text-gray-700 mb-1">ความดันโลหิตตัวล่าง (mmHg)</label>
-                        <input type="number" id="blood_pressure_dia" name="blood_pressure_dia" min="30" max="150" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required placeholder="80">
-                        <p class="text-xs text-gray-500 mt-1">ค่าปกติ: 60 - 90</p>
-                    </div>
-                    
-                    <div class="mb-4">
-                        <label for="respiratory_rate" class="block text-sm font-medium text-gray-700 mb-1">อัตราการหายใจ (ครั้ง/นาที)</label>
-                        <input type="number" id="respiratory_rate" name="respiratory_rate" min="5" max="60" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required placeholder="16">
-                        <p class="text-xs text-gray-500 mt-1">ค่าปกติ: 12 - 20</p>
-                    </div>
-                    
-                    <div class="mb-4">
-                        <label for="oxygen_saturation" class="block text-sm font-medium text-gray-700 mb-1">ความอิ่มตัวของออกซิเจนในเลือด (%)</label>
-                        <input type="number" id="oxygen_saturation" name="oxygen_saturation" min="70" max="100" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required placeholder="98">
-                        <p class="text-xs text-gray-500 mt-1">ค่าปกติ: 95 - 100</p>
-                    </div>
-                </div>
+            <div class="mb-4">
+                <label for="patient_name" class="block text-sm font-medium text-gray-700 mb-1">ชื่อ-นามสกุล</label>
+                <input type="text" id="patient_name" name="patient_name" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required readonly>
+            </div>
+            
+            <div>
+                <label for="timestamp" class="block text-sm font-medium text-gray-700 mb-1">วันเวลาที่บันทึก (เวลาประเทศไทย)</label>
+                <input type="text" id="timestamp" class="w-full rounded-md border-gray-300 bg-gray-100 shadow-sm" value="{{ format_datetime(datetime.now() + timedelta(hours=7)) }}" readonly>
             </div>
         </div>
         
-        <!-- ปุ่มบันทึกและยกเลิก -->
-        <div class="flex justify-end space-x-3">
-            <a href="{{ url_for('index') }}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors">
-                ยกเลิก
-            </a>
-            <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
-                บันทึกข้อมูล
-            </button>
+        <!-- Vital Signs -->
+        <div class="bg-green-50 rounded-lg p-4">
+            <h2 class="text-lg font-medium text-green-800 mb-4">Vital Signs</h2>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="mb-4">
+                    <label for="temperature" class="block text-sm font-medium text-gray-700 mb-1">อุณหภูมิ (°C)</label>
+                    <input type="number" id="temperature" name="temperature" step="0.1" min="30" max="45" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required placeholder="36.5">
+                    <p class="text-xs text-gray-500 mt-1">ค่าปกติ: 36.0 - 38.0</p>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="heart_rate" class="block text-sm font-medium text-gray-700 mb-1">อัตราการเต้นของหัวใจ (ครั้ง/นาที)</label>
+                    <input type="number" id="heart_rate" name="heart_rate" min="30" max="200" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required placeholder="80">
+                    <p class="text-xs text-gray-500 mt-1">ค่าปกติ: 60 - 100</p>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="blood_pressure_sys" class="block text-sm font-medium text-gray-700 mb-1">ความดันโลหิตตัวบน (mmHg)</label>
+                    <input type="number" id="blood_pressure_sys" name="blood_pressure_sys" min="60" max="250" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required placeholder="120">
+                    <p class="text-xs text-gray-500 mt-1">ค่าปกติ: 90 - 140</p>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="blood_pressure_dia" class="block text-sm font-medium text-gray-700 mb-1">ความดันโลหิตตัวล่าง (mmHg)</label>
+                    <input type="number" id="blood_pressure_dia" name="blood_pressure_dia" min="30" max="150" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required placeholder="80">
+                    <p class="text-xs text-gray-500 mt-1">ค่าปกติ: 60 - 90</p>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="respiratory_rate" class="block text-sm font-medium text-gray-700 mb-1">อัตราการหายใจ (ครั้ง/นาที)</label>
+                    <input type="number" id="respiratory_rate" name="respiratory_rate" min="5" max="60" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required placeholder="16">
+                    <p class="text-xs text-gray-500 mt-1">ค่าปกติ: 12 - 20</p>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="oxygen_saturation" class="block text-sm font-medium text-gray-700 mb-1">ความอิ่มตัวของออกซิเจนในเลือด (%)</label>
+                    <input type="number" id="oxygen_saturation" name="oxygen_saturation" min="70" max="100" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" required placeholder="98">
+                    <p class="text-xs text-gray-500 mt-1">ค่าปกติ: 95 - 100</p>
+                </div>
+            </div>
         </div>
-    </form>
+    </div>
+    
+    <!-- ปุ่มบันทึกและยกเลิก -->
+    <div class="flex justify-end space-x-3">
+        <a href="{{ url_for('index') }}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors">
+            ยกเลิก
+        </a>
+        <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
+            บันทึกข้อมูล
+        </button>
+    </div>
+</form>
 </div>
 
 <!-- JavaScript สำหรับดึงชื่อผู้ป่วยอัตโนมัติเมื่อเลือกรหัสผู้ป่วย และเพิ่ม Select2 -->
 <script>
-    $(document).ready(function() {
-        // เริ่มต้นใช้งาน Select2
-        $('.select2').select2({
-            placeholder: "-- ค้นหาผู้ป่วยด้วยรหัสหรือชื่อ --",
-            allowClear: true,
-            width: '100%'
-        });
+$(document).ready(function() {
+    // เริ่มต้นใช้งาน Select2
+    $('.select2').select2({
+        placeholder: "-- ค้นหาผู้ป่วยด้วยรหัสหรือชื่อ --",
+        allowClear: true,
+        width: '100%'
     });
 
-    function updatePatientName(patientId) {
-        const selectElement = document.getElementById('patient_id');
-        const patientNameInput = document.getElementById('patient_name');
-        
-        if (patientId) {
-            const selectedOption = Array.from(selectElement.options).find(option => option.value === patientId);
-            if (selectedOption) {
-                patientNameInput.value = selectedOption.dataset.name;
-            }
-        } else {
-            patientNameInput.value = '';
-        }
+    // เรียกใช้ฟังก์ชัน updatePatientName เมื่อหน้าเว็บโหลดเสร็จ
+    // เพื่อให้แสดงชื่อผู้ป่วยที่ถูกเลือกโดยอัตโนมัติ (กรณีมาจากเมนูคลิกขวา)
+    const patientIdSelect = document.getElementById('patient_id');
+    if (patientIdSelect.value) {
+        updatePatientName(patientIdSelect.value);
     }
+});
+
+function updatePatientName(patientId) {
+    const selectElement = document.getElementById('patient_id');
+    const patientNameInput = document.getElementById('patient_name');
+    
+    if (patientId) {
+        const selectedOption = Array.from(selectElement.options).find(option => option.value === patientId);
+        if (selectedOption) {
+            patientNameInput.value = selectedOption.dataset.name;
+        }
+    } else {
+        patientNameInput.value = '';
+    }
+}
 </script>
 {% endblock %}

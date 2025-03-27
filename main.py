@@ -1,20 +1,50 @@
 import os
 import io
 import csv
+import cv2
+import base64
+import threading
+import time
 from datetime import datetime, timedelta
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, Response, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import desc
 import random # เพื่อสร้างข้อมูลตัวอย่าง
 import pandas as pd
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from flask_socketio import SocketIO
+from sqlalchemy import exc as sqlalchemy_exc
+
+from robot_controller import *
 
 # สร้าง Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///vitals.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+# เริ่มต้น ROS2 และ RobotController
+rclpy.init()
+robot_controller = RobotController(socketio_instance=socketio)
+
+# รัน ROS2 spin ใน thread แยก
+ros_thread = threading.Thread(target=spin_robot_controller, args=(robot_controller,), daemon=True)
+ros_thread.start()
+
+
+# ตัวแปรกลอบอลสำหรับเก็บกระแสวิดีโอล่าสุด
+global_frame = None
+camera_active = False
+camera_thread = None
+lock = threading.Lock()
+
+# สร้างโฟลเดอร์สำหรับเก็บรูปภาพ (ถ้ายังไม่มี)
+UPLOAD_FOLDER = 'static/uploads'
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
 # สร้าง database instance
 db = SQLAlchemy(app)
@@ -251,6 +281,8 @@ def check_abnormal_values(vital):
     
     return abnormal_values
 
+
+
 @app.route("/patient/<patient_id>")
 def patient_vitals(patient_id):
     # ดึงข้อมูลผู้ป่วย
@@ -294,7 +326,8 @@ def patient_vitals(patient_id):
     )
 
 @app.route("/add_vital", methods=["GET", "POST"])
-def add_vital():
+@app.route("/add_vital/<patient_id>", methods=["GET", "POST"])
+def add_vital(patient_id=None):
     if request.method == "POST":
         try:
             # บันทึกเวลาเป็น UTC แต่บวกเวลา 7 ชั่วโมงเพื่อให้เป็นเวลาประเทศไทย
@@ -321,6 +354,7 @@ def add_vital():
     
     # ดึงข้อมูลผู้ป่วยล่าสุดของแต่ละรหัสผู้ป่วยโดยไม่ซ้ำกัน
     from sqlalchemy import func
+
     
     # ใช้ subquery เพื่อดึงข้อมูลล่าสุดของแต่ละรหัสผู้ป่วย
     subquery = db.session.query(
@@ -362,7 +396,15 @@ def add_vital():
             )
         ).all()
     
-    return render_template("add_vital.html", patients=patients)
+    # ตัวแปรสำหรับเก็บ ID ของผู้ป่วยที่เลือก (ถ้ามี)
+    selected_patient = None
+    
+    # ถ้ามีการระบุ patient_id
+    if patient_id:
+        # ค้นหาข้อมูลผู้ป่วยจากรายการ
+        selected_patient = next((p for p in patients if p[0] == patient_id), None)
+    
+    return render_template("add_vital.html", patients=patients, selected_patient=selected_patient)
 
 # ฟังก์ชันสำหรับดาวน์โหลดข้อมูลผู้ป่วยเป็นไฟล์ Excel
 @app.route("/export/<patient_id>")
@@ -467,7 +509,7 @@ def export_patient_data(patient_id):
     # ตั้งค่า pointer ไปที่จุดเริ่มต้นของไฟล์
     output.seek(0)
     
-    # ส่งไฟล์กลับไปให้ผู้ใช้
+# ส่งไฟล์กลับไปให้ผู้ใช้
     return send_file(
         output,
         as_attachment=True,
@@ -543,6 +585,178 @@ def utility_processor():
         timedelta=timedelta
     )
 
+# ฟังก์ชันกล้อง #
+
+def camera_stream():
+    """ฟังก์ชันสำหรับเปิดกล้องและอ่านเฟรม"""
+    global global_frame, camera_active
+    
+    # เปิดกล้อง (0 คือกล้องตัวแรก, สามารถเปลี่ยนเป็น 1, 2, ... สำหรับกล้องตัวอื่น)
+    camera = cv2.VideoCapture(0)
+    
+    # ตรวจสอบว่าเปิดกล้องสำเร็จหรือไม่
+    if not camera.isOpened():
+        print("ไม่สามารถเปิดกล้องได้")
+        return
+    
+    # ปรับความละเอียดของภาพ (ถ้าต้องการ)
+    camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    
+    camera_active = True
+    
+    # วนลูปอ่านภาพจากกล้อง
+    while camera_active:
+        success, frame = camera.read()
+        if not success:
+            print("ไม่สามารถอ่านเฟรมจากกล้องได้")
+            break
+        
+        # ตลับภาพถ้าคุณต้องการ
+        # frame = cv2.flip(frame, 1)  # กลับด้านซ้าย-ขวา
+        
+        # แปลงเป็นรูปแบบที่เว็บแสดงผลได้
+        _, buffer = cv2.imencode('.jpg', frame)
+        encoded_frame = base64.b64encode(buffer).decode('utf-8')
+        
+        # อัปเดตเฟรมล่าสุด
+        with lock:
+            global_frame = encoded_frame
+        
+        # หน่วงเวลาเล็กน้อยเพื่อลดการใช้ CPU
+        time.sleep(0.03)  # ประมาณ 30 FPS
+    
+    # เมื่อสิ้นสุดลูป ปิดกล้อง
+    camera.release()
+    print("ปิดกล้องแล้ว")
+
+def gen_camera_frames():
+    """ฟังก์ชันเพื่อส่งเฟรมของภาพเป็น multipart response"""
+    global global_frame
+    
+    while True:
+        # รอจนกว่าจะมีเฟรมล่าสุด
+        with lock:
+            if global_frame is None:
+                continue
+            frame_data = global_frame
+        
+        # ส่งข้อมูลรูปภาพในรูปแบบที่เหมาะสมสำหรับ multipart response
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + base64.b64decode(frame_data) + b'\r\n')
+        
+        # หน่วงเวลาเล็กน้อย
+        time.sleep(0.03)
+
+# เส้นทางสำหรับเปิด/ปิดกล้อง
+@app.route('/start_camera')
+def start_camera():
+    global camera_thread, camera_active, global_frame
+    
+    if camera_thread is None or not camera_thread.is_alive():
+        global_frame = None
+        camera_active = True
+        camera_thread = threading.Thread(target=camera_stream)
+        camera_thread.daemon = True
+        camera_thread.start()
+        return "กำลังเปิดกล้อง..."
+    
+    return "กล้องเปิดอยู่แล้ว"
+
+@app.route('/stop_camera')
+def stop_camera():
+    global camera_active, camera_thread
+    
+    camera_active = False
+    if camera_thread is not None and camera_thread.is_alive():
+        camera_thread.join(timeout=1.0)
+    
+    return "ปิดกล้องแล้ว"
+
+# เส้นทางสำหรับสตรีมวิดีโอ
+@app.route('/video_feed')
+def video_feed():
+    return Response(gen_camera_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+# เส้นทางสำหรับหน้ากล้อง
+@app.route('/camera')
+def camera():
+    return render_template('camera.html')
+
+# เส้นทางสำหรับบันทึกภาพถ่าย
+@app.route('/save_image', methods=['POST'])
+def save_image():
+    try:
+        # รับข้อมูลรูปภาพจากคำขอ
+        data = request.get_json()
+        if not data or 'image_data' not in data:
+            return jsonify({'success': False, 'error': 'ไม่พบข้อมูลรูปภาพ'}), 400
+        
+        # แยกส่วนหัวของ Data URL ออกจากข้อมูลรูปภาพ
+        image_data = data['image_data']
+        if 'base64,' in image_data:
+            # ถ้าเป็น Data URL แบบเต็ม (เช่น data:image/png;base64,ABC123...)
+            image_data = image_data.split('base64,')[1]
+        
+        # สร้างชื่อไฟล์ด้วยวันที่และเวลาปัจจุบัน
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        # เพิ่ม patient_id ถ้ามี
+        patient_id = data.get('patient_id', '')
+        if patient_id:
+            filename = f"patient_{patient_id}_{timestamp}.png"
+        else:
+            filename = f"image_{timestamp}.png"
+        
+        # สร้างเส้นทางไฟล์เต็ม
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        
+        # แปลงข้อมูล base64 เป็นไฟล์ภาพและบันทึก
+        with open(filepath, "wb") as f:
+            f.write(base64.b64decode(image_data))
+        
+        # คืนค่า URL ของรูปภาพที่บันทึกแล้ว
+        image_url = f"/static/uploads/{filename}"
+        return jsonify({
+            'success': True, 
+            'message': 'บันทึกรูปภาพสำเร็จ',
+            'filename': filename,
+            'url': image_url
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/robot_control')
+def robot_control():
+    return render_template('robot_control.html')
+
+# API สำหรับควบคุมหุ่นยนต์
+@app.route('/control', methods=['POST'])
+def control_robot():
+    data = request.json
+    linear_x = data.get('linear_x', 0.0)
+    angular_z = data.get('angular_z', 0.0)
+    
+    robot_controller.publish_velocity(linear_x, angular_z)
+    return jsonify({'status': 'success', 'linear_x': linear_x, 'angular_z': angular_z})
+
+@socketio.on('nav_goal')
+def handle_nav_goal(data):
+    """รับข้อมูลเป้าหมายการนำทางจาก Socket.IO และส่งไปยัง robot_controller"""
+    print(f"Received navigation goal: {data}")
+    if robot_controller:
+        try:
+            x = float(data.get('x', 0.0))
+            y = float(data.get('y', 0.0))
+            theta = float(data.get('theta', 0.0))
+            robot_controller.send_nav_goal(x, y, theta)
+        except Exception as e:
+            print(f"Error sending navigation goal: {e}")
+    else:
+        socketio.emit('debug_message', {'message': 'Robot controller not available'})
+
 # ฟังก์ชันสำหรับเตรียมฐานข้อมูลและสร้างข้อมูลตัวอย่าง
 def initialize_database():
     with app.app_context():
@@ -550,9 +764,66 @@ def initialize_database():
         create_sample_data()
         print("สร้างข้อมูลตัวอย่างสำเร็จ! จำนวนข้อมูล:", VitalSign.query.count())
 
-if __name__ == "__main__":
-    # เรียกใช้ฟังก์ชันเพื่อเตรียมข้อมูลตัวอย่าง
-    initialize_database()
+@socketio.on('request_real_map')
+def handle_request_real_map():
+    """รับคำขอข้อมูลแผนที่จริงโดยตรง"""
+    print("Client requested real map")
+    if robot_controller:
+        robot_controller.handle_request_real_map()
+    else:
+        socketio.emit('debug_message', {'message': 'Robot controller not available'})
+
+# เพิ่มการ import sqlalchemy exceptions ที่ต้นไฟล์ main.py
+from sqlalchemy import exc as sqlalchemy_exc
+
+# จัดการกับ HTTP errors
+@app.errorhandler(404)
+def page_not_found(e):
+    flash("ไม่พบหน้าที่คุณต้องการ", "warning")
+    return redirect(url_for('index'))
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    flash("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง", "danger")
+    return redirect(url_for('index'))
+
+# จัดการกับข้อผิดพลาดอื่นๆ ทั้งหมด
+@app.errorhandler(Exception)
+def handle_exception(e):
+    # แสดงข้อความข้อผิดพลาดในคอนโซล (ช่วยในการแก้ไขปัญหา)
+    print(f"เกิดข้อผิดพลาด: {str(e)}")
     
-    # รัน Flask app
-    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))
+    # แสดงข้อความแจ้งเตือนผู้ใช้
+    flash("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง", "danger")
+    
+    # เด้งกลับไปหน้าหลัก
+    return redirect(url_for('index'))
+
+# ถ้าคุณต้องการจัดการเฉพาะบาง errors
+@app.errorhandler(TypeError)
+def handle_type_error(e):
+    flash("เกิดข้อผิดพลาดในการประมวลผลข้อมูล กรุณาตรวจสอบและลองใหม่อีกครั้ง", "danger")
+    return redirect(url_for('index'))
+
+@app.errorhandler(ValueError)
+def handle_value_error(e):
+    flash("ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง", "danger")
+    return redirect(url_for('index'))
+
+# หากคุณต้องการจัดการกับ SQLAlchemy errors
+@app.errorhandler(sqlalchemy_exc.SQLAlchemyError)
+def handle_db_error(e):
+    db.session.rollback()  # ยกเลิกการทำธุรกรรมที่ไม่สมบูรณ์
+    flash("เกิดข้อผิดพลาดในการเข้าถึงฐานข้อมูล กรุณาลองใหม่อีกครั้ง", "danger")
+    return redirect(url_for('index'))
+
+@app.route('/webrtc_stream')
+def webrtc_stream():
+    return render_template('webrtc_stream.html')
+
+
+if __name__ == '__main__':
+    try:
+        socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+    finally:
+        robot_controller.shutdown()

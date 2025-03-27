@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+
+{% block title %}กล้องเซิร์ฟเวอร์ - ระบบบันทึก Vital Signs{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow-md p-6">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <h1 class="text-2xl font-semibold text-gray-800 mb-4 md:mb-0">กล้องเซิร์ฟเวอร์</h1>
+        <div class="flex space-x-2">
+            <button id="start-camera" class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                เปิดกล้อง
+            </button>
+            <button id="stop-camera" class="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                </svg>
+                ปิดกล้อง
+            </button>
+            <button id="capture-image" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                ถ่ายภาพ
+            </button>
+        </div>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-gray-100 rounded-lg overflow-hidden">
+            <h2 class="text-lg font-medium text-gray-800 p-4 bg-gray-200">กล้องสด</h2>
+            <div class="relative">
+                <img id="camera-feed" src="/video_feed" alt="กล้องสด" class="w-full h-auto" style="display: none;">
+                <div id="camera-placeholder" class="w-full bg-gray-800 flex items-center justify-center" style="height: 360px;">
+                    <div class="text-center text-white p-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <p class="text-lg">กล้องยังไม่เปิด</p>
+                        <p class="text-sm text-gray-400 mt-2">กดปุ่ม "เปิดกล้อง" เพื่อเริ่มแสดงภาพจากกล้อง</p>
+                    </div>
+                </div>
+                <div id="camera-loading" class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 text-white" style="display: none;">
+                    <div class="text-center">
+                        <svg class="animate-spin h-10 w-10 mx-auto mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="text-lg">กำลังเปิดกล้อง...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-gray-100 rounded-lg overflow-hidden">
+            <h2 class="text-lg font-medium text-gray-800 p-4 bg-gray-200">ภาพที่ถ่าย</h2>
+            <div class="relative">
+                <canvas id="captured-image" class="w-full h-auto bg-gray-900" style="height: 360px;"></canvas>
+                <div id="no-image-message" class="absolute inset-0 flex items-center justify-center text-white bg-gray-900 bg-opacity-70">
+                    <div class="text-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <p>ยังไม่มีภาพ กดปุ่ม "ถ่ายภาพ" เพื่อถ่ายภาพ</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 flex justify-end space-x-2">
+                <a id="download-link" download="patient-image.png" class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors hidden">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    ดาวน์โหลดภาพ
+                </a>
+                <button id="save-to-server" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors hidden">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                    บันทึกลงเซิร์ฟเวอร์
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- เพิ่มส่วนแสดงผลการบันทึกภาพ -->
+    <div id="save-result" class="mt-6 bg-green-50 p-4 rounded-lg hidden">
+        <div class="flex items-start">
+            <div class="flex-shrink-0 mt-0.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-lg font-medium text-green-800">บันทึกภาพสำเร็จ</h3>
+                <div class="mt-2 text-sm text-green-700">
+                    <p>ระบบได้บันทึกภาพถ่ายลงในเซิร์ฟเวอร์เรียบร้อยแล้ว</p>
+                    <p class="mt-1">
+                        <a id="saved-image-link" href="#" class="font-medium text-green-700 underline hover:text-green-600" target="_blank">
+                            ดูภาพที่บันทึกไว้
+                        </a>
+                    </p>
+                </div>
+            </div>
+            <div class="ml-auto pl-3">
+                <div class="-mx-1.5 -my-1.5">
+                    <button id="close-save-result" class="inline-flex rounded-md p-1.5 text-green-500 hover:bg-green-100">
+                        <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="mt-6 bg-blue-50 p-4 rounded-lg">
+        <h3 class="text-lg font-medium text-blue-800 mb-2">คำแนะนำ</h3>
+        <ul class="list-disc pl-5 text-blue-700">
+            <li>คลิกปุ่ม "เปิดกล้อง" เพื่อเปิดใช้งานกล้องบนเซิร์ฟเวอร์</li>
+            <li>คลิกปุ่ม "ถ่ายภาพ" เพื่อจับภาพจากกล้องเซิร์ฟเวอร์</li>
+            <li>คลิกปุ่ม "ปิดกล้อง" เพื่อหยุดการทำงานของกล้อง (ช่วยประหยัดทรัพยากรระบบ)</li>
+            <li>คลิกปุ่ม "บันทึกภาพ" เพื่อดาวน์โหลดภาพที่ถ่ายไว้</li>
+            <li>โปรดตรวจสอบว่าเซิร์ฟเวอร์มีกล้องเชื่อมต่ออยู่ หากไม่มีกล้อง คุณอาจเห็นข้อผิดพลาด</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const cameraFeed = document.getElementById('camera-feed');
+    const cameraPlaceholder = document.getElementById('camera-placeholder');
+    const cameraLoading = document.getElementById('camera-loading');
+    const capturedImage = document.getElementById('captured-image');
+    const noImageMessage = document.getElementById('no-image-message');
+    const downloadLink = document.getElementById('download-link');
+    
+    const startCameraBtn = document.getElementById('start-camera');
+    const stopCameraBtn = document.getElementById('stop-camera');
+    const captureImageBtn = document.getElementById('capture-image');
+    const saveToServerBtn = document.getElementById('save-to-server');
+    const saveResult = document.getElementById('save-result');
+    const savedImageLink = document.getElementById('saved-image-link');
+    const closeSaveResult = document.getElementById('close-save-result');
+    
+    // ปรับขนาด canvas ให้ตรงกับขนาดของวิดีโอ
+    function adjustCanvasSize() {
+        capturedImage.width = cameraFeed.offsetWidth;
+        capturedImage.height = cameraFeed.offsetHeight;
+    }
+    
+    // เปิดกล้อง
+    startCameraBtn.addEventListener('click', function() {
+        cameraLoading.style.display = 'flex';
+        
+        fetch('/start_camera')
+            .then(response => response.text())
+            .then(data => {
+                console.log(data);
+                
+                // แสดงกระแสวิดีโอ
+                cameraFeed.src = '/video_feed?' + new Date().getTime(); // เพิ่ม timestamp เพื่อป้องกันการแคช
+                cameraFeed.style.display = 'block';
+                cameraPlaceholder.style.display = 'none';
+                
+                // รอให้โหลดภาพสักครู่แล้วซ่อนการโหลด
+                setTimeout(function() {
+                    cameraLoading.style.display = 'none';
+                }, 2000);
+            })
+            .catch(error => {
+                console.error('เกิดข้อผิดพลาด:', error);
+                cameraLoading.style.display = 'none';
+                alert('ไม่สามารถเปิดกล้องได้ โปรดตรวจสอบว่ามีกล้องเชื่อมต่อกับเซิร์ฟเวอร์หรือไม่');
+            });
+    });
+    
+    // ปิดกล้อง
+    stopCameraBtn.addEventListener('click', function() {
+        fetch('/stop_camera')
+            .then(response => response.text())
+            .then(data => {
+                console.log(data);
+                
+                // ซ่อนกระแสวิดีโอและแสดงพื้นที่ว่าง
+                cameraFeed.style.display = 'none';
+                cameraPlaceholder.style.display = 'flex';
+                
+                // ล้างแคชโดยเปลี่ยน src เป็นค่าว่าง
+                cameraFeed.src = '';
+            })
+            .catch(error => {
+                console.error('เกิดข้อผิดพลาด:', error);
+                alert('ไม่สามารถปิดกล้องได้: ' + error);
+            });
+    });
+    
+    // ถ่ายภาพ
+    captureImageBtn.addEventListener('click', function() {
+        if (cameraFeed.style.display === 'none') {
+            alert('กรุณาเปิดกล้องก่อนถ่ายภาพ');
+            return;
+        }
+        
+        // ปรับขนาด canvas ให้ตรงกับวิดีโอ
+        adjustCanvasSize();
+        
+        // วาดภาพจากกล้องลงใน canvas
+        const context = capturedImage.getContext('2d');
+        context.drawImage(cameraFeed, 0, 0, capturedImage.width, capturedImage.height);
+        
+        // ซ่อนข้อความ "ยังไม่มีภาพ" และแสดงลิงก์ดาวน์โหลด
+        noImageMessage.style.display = 'none';
+        downloadLink.classList.remove('hidden');
+        saveToServerBtn.classList.remove('hidden');
+        
+        // อัปเดตลิงก์ดาวน์โหลด
+        try {
+            const imageDataUrl = capturedImage.toDataURL('image/png');
+            downloadLink.href = imageDataUrl;
+            
+            // กำหนดชื่อไฟล์ให้มีวันที่และเวลาปัจจุบัน
+            const now = new Date();
+            const timestamp = now.getFullYear() + 
+                              ('0' + (now.getMonth() + 1)).slice(-2) + 
+                              ('0' + now.getDate()).slice(-2) + '_' +
+                              ('0' + now.getHours()).slice(-2) + 
+                              ('0' + now.getMinutes()).slice(-2) + 
+                              ('0' + now.getSeconds()).slice(-2);
+            
+            downloadLink.setAttribute('download', `patient_image_${timestamp}.png`);
+        } catch (error) {
+            console.error('ไม่สามารถแปลงภาพได้:', error);
+            alert('เกิดข้อผิดพลาดในการถ่ายภาพ โปรดลองอีกครั้ง');
+        }
+    });
+    
+    // บันทึกภาพลงเซิร์ฟเวอร์
+    saveToServerBtn.addEventListener('click', function() {
+        if (noImageMessage.style.display !== 'none') {
+            alert('กรุณาถ่ายภาพก่อนบันทึกลงเซิร์ฟเวอร์');
+            return;
+        }
+        
+        // แสดงข้อความรอสักครู่
+        saveToServerBtn.disabled = true;
+        saveToServerBtn.innerHTML = `
+            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            กำลังบันทึก...
+        `;
+        
+        // อ่านข้อมูลรูปภาพจาก canvas
+        const imageDataUrl = capturedImage.toDataURL('image/png');
+        
+        // ส่งข้อมูลรูปภาพไปยังเซิร์ฟเวอร์
+        fetch('/save_image', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                image_data: imageDataUrl,
+                // ถ้ามีรหัสผู้ป่วย สามารถส่งไปด้วย
+                // patient_id: '123456'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // คืนค่าปุ่มกลับสู่สถานะปกติ
+            saveToServerBtn.disabled = false;
+            saveToServerBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                </svg>
+                บันทึกลงเซิร์ฟเวอร์
+            `;
+            
+            if (data.success) {
+                // แสดงผลการบันทึกสำเร็จ
+                savedImageLink.href = data.url;
+                savedImageLink.textContent = data.filename;
+                saveResult.classList.remove('hidden');
+                
+                // บันทึกข้อมูลเพิ่มเติมได้ที่นี่ เช่น บันทึกลงในฐานข้อมูล
+            } else {
+                // แสดงข้อความผิดพลาด
+                alert('เกิดข้อผิดพลาดในการบันทึกภาพ: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('เกิดข้อผิดพลาด:', error);
+            alert('เกิดข้อผิดพลาดในการบันทึกภาพ โปรดลองอีกครั้ง');
+            
+            // คืนค่าปุ่มกลับสู่สถานะปกติ
+            saveToServerBtn.disabled = false;
+            saveToServerBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                </svg>
+                บันทึกลงเซิร์ฟเวอร์
+            `;
+        });
+    });
+    
+    // ปิดผลการบันทึก
+    closeSaveResult.addEventListener('click', function() {
+        saveResult.classList.add('hidden');
+    });
+    
+    // ปรับขนาด canvas เมื่อหน้าต่างเปลี่ยนขนาด
+    window.addEventListener('resize', adjustCanvasSize);
+    
+    // เรียกใช้ adjustCanvasSize เมื่อโหลดหน้าเว็บ
+    adjustCanvasSize();
+});
+</script>
+{% endblock %}

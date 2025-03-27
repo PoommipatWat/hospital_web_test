@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>ROS2 WebSocket Realtime</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .message-card { border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 20px; background-color: #f9f9f9; }
+        .message-content { font-size: 18px; margin-bottom: 10px; }
+        .message-time { color: #666; font-size: 14px; }
+        .status { margin-bottom: 20px; padding: 10px; border-radius: 4px; }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        h1, h2 { font-family: 'Kanit', sans-serif; }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <h1>ระบบแสดงข้อความจาก ROS2 แบบเรียลไทม์</h1>
+    
+    <div id="status" class="status disconnected">
+        กำลังเชื่อมต่อกับ WebSocket...
+    </div>
+    
+    <div class="message-card">
+        <h2>ข้อความล่าสุด</h2>
+        <div class="message-content" id="message-content">ยังไม่มีข้อความ</div>
+        <div class="message-time" id="message-time"></div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        const statusElement = document.getElementById('status');
+        const messageContentElement = document.getElementById('message-content');
+        const messageTimeElement = document.getElementById('message-time');
+        
+        // เชื่อมต่อกับ WebSocket server
+        const socket = io();
+        
+        // แปลงรูปแบบเวลา
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleString('th-TH', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+        
+        // เมื่อเชื่อมต่อสำเร็จ
+        socket.on('connect', function() {
+            statusElement.textContent = 'เชื่อมต่อกับ ROS2 WebSocket สำเร็จ';
+            statusElement.className = 'status connected';
+        });
+        
+        // เมื่อการเชื่อมต่อถูกตัด
+        socket.on('disconnect', function() {
+            statusElement.textContent = 'ขาดการเชื่อมต่อจาก ROS2 WebSocket';
+            statusElement.className = 'status disconnected';
+        });
+        
+        // รับฟังเหตุการณ์ข้อความจาก ROS
+        socket.on('ros_battery_message', function(message) {
+            messageContentElement.textContent = message.data;
+        });
+    </script>
+</body>
+</html>

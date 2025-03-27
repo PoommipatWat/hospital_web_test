@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+
+{% block title %}ดูภาพจากกล้องหุ่นยนต์ - ระบบบันทึก Vital Signs{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow-md p-6">
+    <h1 class="text-2xl font-semibold text-gray-800 mb-6 mobile-page-title">ดูภาพจากกล้องหุ่นยนต์</h1>
+    
+    <div class="grid grid-cols-1 gap-6">
+        <!-- ส่วนแสดงวิดีโอ -->
+        <div class="bg-indigo-50 rounded-lg p-4">
+            <h2 class="text-lg font-medium text-indigo-800 mb-4">ภาพจากกล้อง</h2>
+            
+            <div class="relative bg-gray-100 rounded-lg overflow-hidden min-h-[240px] flex items-center justify-center">
+                <!-- WebRTC Video Stream -->
+                <video id="webrtc-video" autoplay playsinline muted class="w-full h-auto max-h-[480px] rounded-lg"></video>
+                
+                <!-- Loading Indicator -->
+                <div id="loading-indicator" class="absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-70 text-white">
+                    <div class="text-center">
+                        <svg class="animate-spin h-10 w-10 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p>กำลังเชื่อมต่อกับกล้อง...</p>
+                    </div>
+                </div>
+                
+                <!-- Error Message -->
+                <div id="error-message" class="hidden absolute inset-0 flex items-center justify-center bg-red-500 bg-opacity-70 text-white">
+                    <div class="text-center p-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p class="text-lg font-medium">ไม่สามารถเชื่อมต่อกับกล้องได้</p>
+                        <p class="mt-1">กรุณาตรวจสอบการเชื่อมต่อและลองใหม่อีกครั้ง</p>
+                        <button id="retry-button" class="mt-4 px-4 py-2 bg-white text-red-600 rounded-md hover:bg-gray-100">ลองใหม่</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ควบคุมการทำงาน -->
+        <div class="bg-green-50 rounded-lg p-4">
+            <h2 class="text-lg font-medium text-green-800 mb-4">ควบคุมการทำงาน</h2>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="flex flex-col gap-2">
+                    <button id="start-stream" class="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
+                        <span class="flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            เริ่มดูภาพ
+                        </span>
+                    </button>
+                    <button id="stop-stream" class="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors">
+                        <span class="flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                            </svg>
+                            หยุดดูภาพ
+                        </span>
+                    </button>
+                </div>
+                <div class="flex flex-col gap-2">
+                    <button id="capture-image" class="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+                        <span class="flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            จับภาพ
+                        </span>
+                    </button>
+                    {% if patient_id %}
+                    <input type="hidden" id="patient-id" value="{{ patient_id }}">
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Connection Info -->
+            <div class="mt-4 bg-white p-3 rounded-md shadow-sm">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                    <div>
+                        <span class="font-medium text-gray-700">ICE Gathering:</span>
+                        <span id="ice-gathering-state" class="ml-1">-</span>
+                    </div>
+                    <div>
+                        <span class="font-medium text-gray-700">ICE Connection:</span>
+                        <span id="ice-connection-state" class="ml-1">-</span>
+                    </div>
+                    <div>
+                        <span class="font-medium text-gray-700">Signaling:</span>
+                        <span id="signaling-state" class="ml-1">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ภาพที่จับได้ -->
+        <div id="snapshot-container" class="hidden bg-blue-50 rounded-lg p-4">
+            <h2 class="text-lg font-medium text-blue-800 mb-4">ภาพที่จับได้</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <img id="snapshot-image" class="w-full h-auto rounded-lg border border-gray-300" src="" alt="ภาพที่จับได้">
+                </div>
+                <div class="flex flex-col justify-between">
+                    <div>
+                        <p class="mb-2 font-medium text-gray-700">คุณต้องการบันทึกภาพนี้หรือไม่?</p>
+                        <p class="text-sm text-gray-500 mb-4">ภาพนี้จะถูกบันทึกเข้าระบบและสามารถนำไปใช้ในการประเมินผู้ป่วยได้</p>
+                    </div>
+                    <div class="space-y-2">
+                        <button id="save-image" class="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
+                            <span class="flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                </svg>
+                                บันทึกภาพ
+                            </span>
+                        </button>
+                        <button id="discard-image" class="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors">
+                            <span class="flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                ยกเลิก
+                            </span>
+                        </button>
+                    </div>
+                    <div id="save-result" class="hidden mt-4 p-3 rounded-md"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const webrtcVideo = document.getElementById('webrtc-video');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const errorMessage = document.getElementById('error-message');
+        const startStreamButton = document.getElementById('start-stream');
+        const stopStreamButton = document.getElementById('stop-stream');
+        const captureImageButton = document.getElementById('capture-image');
+        const retryButton = document.getElementById('retry-button');
+        const snapshotContainer = document.getElementById('snapshot-container');
+        const snapshotImage = document.getElementById('snapshot-image');
+        const saveImageButton = document.getElementById('save-image');
+        const discardImageButton = document.getElementById('discard-image');
+        const saveResult = document.getElementById('save-result');
+        const patientIdInput = document.getElementById('patient-id');
+        
+        // WebRTC status elements
+        const iceGatheringLog = document.getElementById('ice-gathering-state');
+        const iceConnectionLog = document.getElementById('ice-connection-state');
+        const signalingLog = document.getElementById('signaling-state');
+        
+        // WebRTC connection variables
+        let pc = null;
+        let streamActive = false;
+        
+        // Start stream when button is clicked
+        startStreamButton.addEventListener('click', startStream);
+        
+        // Stop stream when button is clicked
+        stopStreamButton.addEventListener('click', stopStream);
+        
+        // Retry connection when retry button is clicked
+        retryButton.addEventListener('click', () => {
+            errorMessage.classList.add('hidden');
+            startStream();
+        });
+        
+        // Capture image from stream
+        captureImageButton.addEventListener('click', captureImage);
+        
+        // Save captured image
+        saveImageButton.addEventListener('click', saveImage);
+        
+        // Discard captured image
+        discardImageButton.addEventListener('click', () => {
+            snapshotContainer.classList.add('hidden');
+        });
+        
+        // Create WebRTC connection and start streaming
+        async function startStream() {
+            if (streamActive) return;
+            
+            try {
+                loadingIndicator.classList.remove('hidden');
+                errorMessage.classList.add('hidden');
+                
+                if (pc) {
+                    pc.close();
+                    pc = null;
+                }
+                
+                // Create RTCPeerConnection
+                pc = new RTCPeerConnection({
+                    iceServers: [
+                        {
+                            urls: 'stun:stun.l.google.com:19302'
+                        }
+                    ]
+                });
+                
+                // Handle ICE candidates
+                pc.onicecandidate = event => {
+                    if (event.candidate) {
+                        console.log("New ICE candidate:", event.candidate);
+                    }
+                };
+                
+                // Monitor ICE gathering state
+                pc.addEventListener('icegatheringstatechange', () => {
+                    iceGatheringLog.textContent = pc.iceGatheringState;
+                });
+                
+                // Monitor ICE connection state
+                pc.addEventListener('iceconnectionstatechange', () => {
+                    iceConnectionLog.textContent = pc.iceConnectionState;
+                    if (pc.iceConnectionState === 'connected') {
+                        loadingIndicator.classList.add('hidden');
+                        streamActive = true;
+                    } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+                        showError();
+                    }
+                });
+                
+                // Monitor signaling state
+                pc.addEventListener('signalingstatechange', () => {
+                    signalingLog.textContent = pc.signalingState;
+                });
+                
+                // Handle track event to display the stream
+                pc.ontrack = function(event) {
+                    if (webrtcVideo.srcObject !== event.streams[0]) {
+                        webrtcVideo.srcObject = event.streams[0];
+                        console.log('Received remote stream');
+                    }
+                };
+                
+                // Create SDP offer
+                const offer = await pc.createOffer({
+                    offerToReceiveVideo: true,
+                    offerToReceiveAudio: false
+                });
+                await pc.setLocalDescription(offer);
+                
+                // Send offer to server and get answer
+                const response = await fetch('/offer', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sdp: pc.localDescription.sdp,
+                        type: pc.localDescription.type,
+                        video_transform: 'none'
+                    })
+                });
+                
+                // Check if the request was successful
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                
+                // Get the answer from the server
+                const answer = await response.json();
+                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                
+            } catch (error) {
+                console.error('Error starting stream:', error);
+                showError();
+            }
+        }
+        
+        // Stop WebRTC stream
+        function stopStream() {
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+            
+            if (webrtcVideo.srcObject) {
+                const tracks = webrtcVideo.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+                webrtcVideo.srcObject = null;
+            }
+            
+            streamActive = false;
+            loadingIndicator.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+            
+            // Reset status displays
+            iceGatheringLog.textContent = '-';
+            iceConnectionLog.textContent = '-';
+            signalingLog.textContent = '-';
+        }
+        
+        // Show error message
+        function showError() {
+            loadingIndicator.classList.add('hidden');
+            errorMessage.classList.remove('hidden');
+            streamActive = false;
+            
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+        }
+        
+        // Capture image from video stream
+        function captureImage() {
+            if (!streamActive || !webrtcVideo.srcObject) {
+                alert('กรุณาเริ่มสตรีมวิดีโอก่อนจับภาพ');
+                return;
+            }
+            
+            // Create canvas to capture frame
+            const canvas = document.createElement('canvas');
+            canvas.width = webrtcVideo.videoWidth;
+            canvas.height = webrtcVideo.videoHeight;
+            
+            // Draw video frame to canvas
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(webrtcVideo, 0, 0, canvas.width, canvas.height);
+            
+            // Get image data URL
+            const imageDataURL = canvas.toDataURL('image/png');
+            snapshotImage.src = imageDataURL;
+            snapshotContainer.classList.remove('hidden');
+            saveResult.classList.add('hidden');
+            
+            // Scroll to snapshot
+            snapshotContainer.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // Save captured image
+        async function saveImage() {
+            try {
+                const imageData = snapshotImage.src;
+                
+                // Get patient ID if available
+                const patientId = patientIdInput ? patientIdInput.value : '';
+                
+                // Send to server
+                const response = await fetch('/save_image', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image_data: imageData,
+                        patient_id: patientId
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    saveResult.innerHTML = `
+                        <div class="bg-green-100 text-green-700 p-3 rounded">
+                            ${result.message} <a href="${result.url}" target="_blank" class="underline">ดูรูปภาพ</a>
+                        </div>
+                    `;
+                } else {
+                    saveResult.innerHTML = `
+                        <div class="bg-red-100 text-red-700 p-3 rounded">
+                            เกิดข้อผิดพลาด: ${result.error}
+                        </div>
+                    `;
+                }
+                
+                saveResult.classList.remove('hidden');
+                
+            } catch (error) {
+                console.error('Error saving image:', error);
+                saveResult.innerHTML = `
+                    <div class="bg-red-100 text-red-700 p-3 rounded">
+                        เกิดข้อผิดพลาดในการบันทึกภาพ กรุณาลองใหม่อีกครั้ง
+                    </div>
+                `;
+                saveResult.classList.remove('hidden');
+            }
+        }
+        
+        // Auto-start stream when the page loads (optional)
+        // setTimeout(startStream, 1000);
+    });
+</script>
+{% endblock %}

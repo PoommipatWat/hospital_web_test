@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}ควบคุมหุ่นยนต์ - Robot Control System{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow-md p-6">
+    <h1 class="text-2xl font-semibold text-gray-800 mb-6">ควบคุมหุ่นยนต์</h1>
+    
+    <div class="space-y-6">
+        <!-- Speed Control Section -->
+        <div class="bg-indigo-50 rounded-lg p-4">
+            <h2 class="text-lg font-medium text-gray-700 mb-4">การตั้งค่าความเร็ว</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="mb-4">
+                    <label for="linear-speed-slider" class="block text-sm font-medium text-gray-700 mb-1">ความเร็วเชิงเส้น (Linear Speed, m/s)</label>
+                    <input type="range" id="linear-speed-slider" name="linear-speed" min="0.01" max="0.5" step="0.01" value="0.15" 
+                           class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" />
+                    <p class="text-xs text-gray-500 mt-1">ช่วงความเร็ว 0.01 - 0.5 เมตร/วินาที</p>
+                    <p class="text-sm text-indigo-600 mt-1">ค่าปัจจุบัน: <span id="linear-speed-value">0.15</span> m/s</p>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="angular-speed-slider" class="block text-sm font-medium text-gray-700 mb-1">ความเร็วเชิงมุม (Angular Speed, rad/s)</label>
+                    <input type="range" id="angular-speed-slider" name="angular-speed" min="0.01" max="1.5" step="0.01" value="0.5" 
+                           class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" />
+                    <p class="text-xs text-gray-500 mt-1">ช่วงความเร็ว 0.01 - 1.5 เรเดียน/วินาที</p>
+                    <p class="text-sm text-indigo-600 mt-1">ค่าปัจจุบัน: <span id="angular-speed-value">0.50</span> rad/s</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Robot Status Section -->
+        <div class="bg-indigo-50 rounded-lg p-4">
+            <h2 class="text-lg font-medium text-gray-700 mb-4">สถานะการเคลื่อนที่</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-white p-3 rounded-md shadow-sm">
+                    <p class="text-sm text-gray-700">Linear X: <span id="linear-x" class="font-semibold text-indigo-600">0.00</span> m/s</p>
+                    <p class="text-sm text-gray-700">Angular Z: <span id="angular-z" class="font-semibold text-indigo-600">0.00</span> rad/s</p>
+                </div>
+                <div class="bg-white p-3 rounded-md shadow-sm flex items-center justify-center">
+                    <span id="robot-status" class="font-medium text-gray-600">หยุดนิ่ง</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Directional Control Section -->
+        <div class="bg-indigo-50 rounded-lg p-4">
+            <h2 class="text-lg font-medium text-gray-700 mb-4">ควบคุมทิศทาง</h2>
+            <!-- Grid ปุ่มควบคุม 3x3 -->
+            <div class="grid grid-cols-3 gap-2 max-w-md mx-auto">
+                <!-- แถวบน -->
+                <button id="forward-left" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" transform="rotate(-45 12 12)" />
+                    </svg>
+                    หน้าซ้าย
+                </button>
+                <button id="forward" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 11l3-3m0 0l3 3m-3-3v8m0-13a9 9 0 110 18 9 9 0 010-18z" />
+                    </svg>
+                    เดินหน้า
+                </button>
+                <button id="forward-right" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" transform="rotate(45 12 12)" />
+                    </svg>
+                    หน้าขวา
+                </button>
+                
+                <!-- แถวกลาง -->
+                <button id="left" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                    </svg>
+                    เลี้ยวซ้าย
+                </button>
+                <button id="stop" class="control-btn bg-red-600 text-white rounded-md py-2 hover:bg-red-700 transition-colors flex flex-col items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4" />
+                    </svg>
+                    หยุด
+                </button>
+                <button id="right" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                    เลี้ยวขวา
+                </button>
+                
+                <!-- แถวล่าง -->
+                <button id="backward-left" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" transform="rotate(45 12 12)" />
+                    </svg>
+                    หลังซ้าย
+                </button>
+                <button id="backward" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13l-3 3m0 0l-3-3m3 3V8m0 13a9 9 0 110-18 9 9 0 010 18z" />
+                    </svg>
+                    ถอยหลัง
+                </button>
+                <button id="backward-right" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" transform="rotate(-45 12 12)" />
+                    </svg>
+                    หลังขวา
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let currentLinearSpeed = 0.15;
+    let currentAngularSpeed = 0.50;
+    let movementTimeout = null;
+    let isMoving = false;
+    // Track pressed keys
+    const pressedKeys = new Set();
+
+    // Linear Speed Slider
+    const linearSpeedSlider = document.getElementById('linear-speed-slider');
+    const linearSpeedValue = document.getElementById('linear-speed-value');
+    linearSpeedSlider.addEventListener('input', () => {
+        currentLinearSpeed = parseFloat(linearSpeedSlider.value);
+        linearSpeedValue.textContent = currentLinearSpeed.toFixed(2);
+    });
+
+    // Angular Speed Slider
+    const angularSpeedSlider = document.getElementById('angular-speed-slider');
+    const angularSpeedValue = document.getElementById('angular-speed-value');
+    angularSpeedSlider.addEventListener('input', () => {
+        currentAngularSpeed = parseFloat(angularSpeedSlider.value);
+        angularSpeedValue.textContent = currentAngularSpeed.toFixed(2);
+    });
+
+    // Robot Status
+    const linearXDisplay = document.getElementById('linear-x');
+    const angularZDisplay = document.getElementById('angular-z');
+    const robotStatus = document.getElementById('robot-status');
+
+    function sendCommand(linear_x, angular_z) {
+        // Cancel any previous pending movement
+        if (movementTimeout) {
+            clearTimeout(movementTimeout);
+        }
+
+        // Immediate execution to reduce perceived delay
+        fetch('/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                linear_x: linear_x * currentLinearSpeed,
+                angular_z: angular_z * currentAngularSpeed
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            linearXDisplay.textContent = data.linear_x.toFixed(2);
+            angularZDisplay.textContent = data.angular_z.toFixed(2);
+            
+            // Update robot status
+            if (data.linear_x === 0 && data.angular_z === 0) {
+                robotStatus.textContent = 'หยุดนิ่ง';
+                robotStatus.className = 'font-medium text-gray-600';
+                isMoving = false;
+            } else {
+                robotStatus.textContent = 'กำลังเคลื่อนที่';
+                robotStatus.className = 'font-medium text-green-600';
+                isMoving = true;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            robotStatus.textContent = 'เกิดข้อผิดพลาด';
+            robotStatus.className = 'font-medium text-red-600';
+            isMoving = false;
+        });
+    }
+
+    // ปุ่มควบคุมทั้งหมด พร้อมค่า linear_x และ angular_z
+    const buttons = {
+        'forward': [1.0, 0.0],
+        'backward': [-1.0, 0.0],
+        'left': [0.0, 1.0],
+        'right': [0.0, -1.0],
+        'stop': [0.0, 0.0],
+        // เพิ่มปุ่มใหม่
+        'forward-left': [0.7, 0.7],    // เดินหน้าพร้อมเลี้ยวซ้าย
+        'forward-right': [0.7, -0.7],  // เดินหน้าพร้อมเลี้ยวขวา
+        'backward-left': [-0.7, 0.7],  // ถอยหลังพร้อมเลี้ยวซ้าย
+        'backward-right': [-0.7, -0.7] // ถอยหลังพร้อมเลี้ยวขวา
+    };
+
+    // Map keyboard keys to directions
+    const keyMap = {
+        'arrowup': 'forward',
+        'w': 'forward',
+        'arrowdown': 'backward',
+        's': 'backward',
+        'arrowleft': 'left',
+        'a': 'left',
+        'arrowright': 'right',
+        'd': 'right',
+        'q': 'forward-left',
+        'e': 'forward-right',
+        'z': 'backward-left',
+        'c': 'backward-right',
+        ' ': 'stop'
+    };
+
+    // Handle button controls (keep existing button handlers)
+    Object.keys(buttons).forEach(btnId => {
+        const btn = document.getElementById(btnId);
+        if (btn) { // ตรวจสอบว่ามีปุ่มนี้อยู่ในหน้า
+            const [linear_x, angular_z] = buttons[btnId];
+
+            // Pointerdown/pointerup for unified touch and mouse handling
+            btn.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                if (btnId !== 'stop') {
+                    sendCommand(linear_x, angular_z);
+                } else {
+                    sendCommand(0.0, 0.0);
+                }
+            });
+
+            btn.addEventListener('pointerup', () => sendCommand(0.0, 0.0));
+            btn.addEventListener('pointerleave', () => sendCommand(0.0, 0.0));
+            
+            // Prevent context menu on long press
+            btn.addEventListener('contextmenu', (e) => e.preventDefault());
+        }
+    });
+
+    // Process current pressed keys and determine movement
+    function processKeys() {
+        if (pressedKeys.size === 0 || pressedKeys.has(' ')) {
+            // No keys pressed or spacebar is pressed - stop
+            sendCommand(0.0, 0.0);
+            return;
+        }
+        
+        // Priority to the most recently pressed key
+        // Convert Set to Array to get the last element
+        const lastKey = Array.from(pressedKeys).pop();
+        const direction = keyMap[lastKey];
+        
+        if (direction && buttons[direction]) {
+            const [linear_x, angular_z] = buttons[direction];
+            sendCommand(linear_x, angular_z);
+        }
+    }
+
+    // Handle keyboard controls - track keys pressed
+    document.addEventListener('keydown', (e) => {
+        const key = e.key.toLowerCase();
+        if (keyMap[key]) {
+            e.preventDefault();
+            // Only add the key if it's not already in the set
+            // This prevents repeat events from affecting our logic
+            if (!pressedKeys.has(key)) {
+                pressedKeys.add(key);
+                processKeys();
+            }
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        const key = e.key.toLowerCase();
+        if (keyMap[key]) {
+            e.preventDefault();
+            pressedKeys.delete(key);
+            processKeys();
+        }
+    });
+
+    // Clear all keys when window loses focus
+    window.addEventListener('blur', () => {
+        pressedKeys.clear();
+        sendCommand(0.0, 0.0);
+    });
+
+    // แสดงคำอธิบายการใช้คีย์บอร์ด
+    const keyboardInstructions = document.createElement('div');
+    keyboardInstructions.className = 'bg-indigo-50 rounded-lg p-4 mt-4';
+    keyboardInstructions.innerHTML = `
+        <h2 class="text-lg font-medium text-gray-700 mb-2">ควบคุมด้วยคีย์บอร์ด</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+            <div class="bg-white p-2 rounded shadow-sm">
+                <span class="font-medium">W / ลูกศรขึ้น</span>: เดินหน้า
+            </div>
+            <div class="bg-white p-2 rounded shadow-sm">
+                <span class="font-medium">S / ลูกศรลง</span>: ถอยหลัง
+            </div>
+            <div class="bg-white p-2 rounded shadow-sm">
+                <span class="font-medium">A / ลูกศรซ้าย</span>: เลี้ยวซ้าย
+            </div>
+            <div class="bg-white p-2 rounded shadow-sm">
+                <span class="font-medium">D / ลูกศรขวา</span>: เลี้ยวขวา
+            </div>
+            <div class="bg-white p-2 rounded shadow-sm">
+                <span class="font-medium">Q</span>: หน้าซ้าย
+            </div>
+            <div class="bg-white p-2 rounded shadow-sm">
+                <span class="font-medium">E</span>: หน้าขวา
+            </div>
+            <div class="bg-white p-2 rounded shadow-sm">
+                <span class="font-medium">Z</span>: หลังซ้าย
+            </div>
+            <div class="bg-white p-2 rounded shadow-sm">
+                <span class="font-medium">C</span>: หลังขวา
+            </div>
+            <div class="bg-white p-2 rounded shadow-sm col-span-2 md:col-span-4">
+                <span class="font-medium">Space</span>: หยุด
+            </div>
+        </div>
+    `;
+    document.querySelector('.space-y-6').appendChild(keyboardInstructions);
+});
+</script>
+{% endblock %}

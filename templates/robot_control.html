@@ -1,0 +1,1694 @@
+{% extends "base.html" %}
+
+{% block title %}แผนที่และตำแหน่งหุ่นยนต์{% endblock %}
+
+{% block content %}
+
+<style>
+    /* เพิ่ม CSS เหล่านี้ในแท็ก <style> หรือไฟล์ CSS ของคุณ */
+
+.map-container {
+    border: 2px solid #cbd5e0;
+    box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+    transition: border-color 0.2s;
+}
+
+.map-container:hover {
+    border-color: #a0aec0;
+}
+
+.map-scroll-container {
+    max-width: 100%;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #a0aec0 #edf2f7;
+}
+
+/* สไตล์สำหรับ scrollbar บน webkit browsers (Chrome, Safari) */
+.map-scroll-container::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+}
+
+.map-scroll-container::-webkit-scrollbar-track {
+    background: #edf2f7;
+    border-radius: 4px;
+}
+
+.map-scroll-container::-webkit-scrollbar-thumb {
+    background-color: #a0aec0;
+    border-radius: 4px;
+}
+
+/* เพิ่มเส้นกรอบรอบแผนที่เมื่อ active (เช่น เมื่อ scroll) */
+.map-scroll-container:active {
+    outline: 1px solid #667eea;
+}
+
+/* ปรับให้ lidar points มีการแสดงผลที่ดีขึ้น */
+.lidar-point {
+    box-shadow: 0 0 2px rgba(66, 153, 225, 0.6);
+}
+
+/* เพิ่มสไตล์สำหรับจุดเป้าหมาย */
+.goal-marker {
+    box-shadow: 0 0 4px rgba(236, 201, 75, 0.9);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(0.8) translate(-50%, -50%);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.2) translate(-50%, -50%);
+        opacity: 0.7;
+    }
+    100% {
+        transform: scale(0.8) translate(-50%, -50%);
+        opacity: 1;
+    }
+}
+</style>
+
+<div class="bg-white rounded-lg shadow-md p-6">
+    <h1 class="text-2xl font-semibold text-gray-800 mb-6">ระบบหุ่นยนต์</h1>
+    
+    <div id="map-status" class="mb-4 p-3 bg-yellow-100 text-yellow-800 rounded-md">
+        กำลังเชื่อมต่อข้อมูลแผนที่...
+    </div>
+    
+    <!-- ปุ่มรีเฟรชข้อมูล -->
+    <div class="flex justify-end mb-4">
+        <button id="refresh-btn" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            รีเฟรชข้อมูล
+        </button>
+    </div>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- ส่วนแสดงแผนที่ -->
+        <div class="lg:col-span-2">
+            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <h2 class="text-lg font-medium text-indigo-800 mb-4">แผนที่และตำแหน่งหุ่นยนต์</h2>
+                
+<!-- แก้ไขส่วนของ map-container เพื่อให้แผนที่อยู่กึ่งกลาง -->
+<div class="map-container relative border-2 border-gray-400 rounded-lg bg-white shadow-inner" style="width: 100%; height: 100%; max-width: 100%; aspect-ratio: 1/1; margin: 0 auto;">
+    <div class="map-scroll-container flex items-center justify-center" style="width: 100%; height: 100%; overflow: auto;">
+        <div class="map-wrapper relative" style="position: relative; display: inline-block;">
+            <img id="map-canvas" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" alt="แผนที่" class="max-w-none">
+            <div id="map-overlay" class="absolute top-0 left-0 w-full h-full pointer-events-none">
+                <div id="robot-marker" class="hidden absolute w-5 h-5 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 z-10"></div>
+                <div id="robot-direction" class="hidden absolute w-5 h-0.5 bg-red-500 transform-origin-left z-20"></div>
+                <!-- จุดไลดาร์จะถูกเพิ่มเข้ามาแบบไดนามิก -->
+            </div>
+        </div>
+    </div>
+</div>
+                
+                <div id="goal-info" class="mt-4 p-3 bg-blue-50 text-blue-700 rounded-md text-center">
+                    คลิกบนแผนที่เพื่อกำหนดเป้าหมายการนำทาง
+                </div>
+                <div id="map-coordinates" class="mt-2 text-sm text-gray-600"></div>
+            </div>
+        </div>
+
+
+        
+        <!-- ส่วนแสดงข้อมูลและควบคุม -->
+        <div class="lg:col-span-1">
+            <!-- Directional Control Section (from manual_control.html) -->
+            <!-- Keyboard Instructions Section (from manual_control.html) -->
+            <div class="bg-indigo-50 rounded-lg p-4 mb-4">
+                <h2 class="text-lg font-medium text-gray-700 mb-4">ควบคุมทิศทาง</h2>
+                <!-- Grid ปุ่มควบคุม 3x3 -->
+                <div class="grid grid-cols-3 gap-2 max-w-md mx-auto">
+                    <!-- แถวบน -->
+                    <button id="forward-left" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" transform="rotate(-45 12 12)" />
+                        </svg>
+                        หน้าซ้าย
+                    </button>
+                    <button id="forward" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 11l3-3m0 0l3 3m-3-3v8m0-13a9 9 0 110 18 9 9 0 010-18z" />
+                        </svg>
+                        เดินหน้า
+                    </button>
+                    <button id="forward-right" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" transform="rotate(45 12 12)" />
+                        </svg>
+                        หน้าขวา
+                    </button>
+                    
+                    <!-- แถวกลาง -->
+                    <button id="left" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                        </svg>
+                        เลี้ยวซ้าย
+                    </button>
+                    <button id="stop" class="control-btn bg-red-600 text-white rounded-md py-2 hover:bg-red-700 transition-colors flex flex-col items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4" />
+                        </svg>
+                        หยุด
+                    </button>
+                    <button id="right" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                        </svg>
+                        เลี้ยวขวา
+                    </button>
+                    
+                    <!-- แถวล่าง -->
+                    <button id="backward-left" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" transform="rotate(45 12 12)" />
+                        </svg>
+                        หลังซ้าย
+                    </button>
+                    <button id="backward" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13l-3 3m0 0l-3-3m3 3V8m0 13a9 9 0 110-18 9 9 0 010 18z" />
+                        </svg>
+                        ถอยหลัง
+                    </button>
+                    <button id="backward-right" class="control-btn bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition-colors flex flex-col items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" transform="rotate(-45 12 12)" />
+                        </svg>
+                        หลังขวา
+                    </button>
+                </div>
+            </div>
+            <div class="bg-indigo-50 rounded-lg p-4 mb-4">
+                <h2 class="text-lg font-medium text-gray-700 mb-4">การตั้งค่าความเร็ว</h2>
+                <div class="grid grid-cols-1 gap-4">
+                    <div class="mb-4">
+                        <label for="linear-speed-slider" class="block text-sm font-medium text-gray-700 mb-1">ความเร็วเชิงเส้น (Linear Speed, m/s)</label>
+                        <input type="range" id="linear-speed-slider" name="linear-speed" min="0.01" max="0.5" step="0.01" value="0.15" 
+                               class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" />
+                        <p class="text-xs text-gray-500 mt-1">ช่วงความเร็ว 0.01 - 0.5 เมตร/วินาที</p>
+                        <p class="text-sm text-indigo-600 mt-1">ค่าปัจจุบัน: <span id="linear-speed-value">0.15</span> m/s</p>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="angular-speed-slider" class="block text-sm font-medium text-gray-700 mb-1">ความเร็วเชิงมุม (Angular Speed, rad/s)</label>
+                        <input type="range" id="angular-speed-slider" name="angular-speed" min="0.01" max="1.5" step="0.01" value="0.5" 
+                               class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50" />
+                        <p class="text-xs text-gray-500 mt-1">ช่วงความเร็ว 0.01 - 1.5 เรเดียน/วินาที</p>
+                        <p class="text-sm text-indigo-600 mt-1">ค่าปัจจุบัน: <span id="angular-speed-value">0.50</span> rad/s</p>
+                    </div>
+                </div>
+            </div>
+            <!-- Robot Status Section (from manual_control.html) -->
+            <div class="bg-indigo-50 rounded-lg p-4 mb-4">
+                <h2 class="text-lg font-medium text-gray-700 mb-4">สถานะการเคลื่อนที่</h2>
+                <div class="grid grid-cols-1 gap-4">
+                    <div class="bg-white p-3 rounded-md shadow-sm">
+                        <p class="text-sm text-gray-700">Linear X: <span id="linear-x" class="font-semibold text-indigo-600">0.00</span> m/s</p>
+                        <p class="text-sm text-gray-700">Angular Z: <span id="angular-z" class="font-semibold text-indigo-600">0.00</span> rad/s</p>
+                    </div>
+                    <div class="bg-white p-3 rounded-md shadow-sm flex items-center justify-center">
+                        <span id="robot-status" class="font-medium text-gray-600">หยุดนิ่ง</span>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-indigo-50 rounded-lg p-4 mb-4">
+                <h2 class="text-lg font-medium text-gray-700 mb-2">ควบคุมด้วยคีย์บอร์ด</h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                    <div class="bg-white p-2 rounded shadow-sm">
+                        <span class="font-medium">W / ลูกศรขึ้น</span>: เดินหน้า
+                    </div>
+                    <div class="bg-white p-2 rounded shadow-sm">
+                        <span class="font-medium">S / ลูกศรลง</span>: ถอยหลัง
+                    </div>
+                    <div class="bg-white p-2 rounded shadow-sm">
+                        <span class="font-medium">A / ลูกศรซ้าย</span>: เลี้ยวซ้าย
+                    </div>
+                    <div class="bg-white p-2 rounded shadow-sm">
+                        <span class="font-medium">D / ลูกศรขวา</span>: เลี้ยวขวา
+                    </div>
+                    <div class="bg-white p-2 rounded shadow-sm">
+                        <span class="font-medium">Q</span>: หน้าซ้าย
+                    </div>
+                    <div class="bg-white p-2 rounded shadow-sm">
+                        <span class="font-medium">E</span>: หน้าขวา
+                    </div>
+                    <div class="bg-white p-2 rounded shadow-sm">
+                        <span class="font-medium">Z</span>: หลังซ้าย
+                    </div>
+                    <div class="bg-white p-2 rounded shadow-sm">
+                        <span class="font-medium">C</span>: หลังขวา
+                    </div>
+                    <div class="bg-white p-2 rounded shadow-sm col-span-2 md:col-span-4">
+                        <span class="font-medium">Space</span>: หยุด
+                    </div>
+                </div>
+            </div>
+            <!-- ข้อมูลตำแหน่ง -->
+            <div class="bg-indigo-50 rounded-lg p-4 mb-4">
+                <h2 class="text-lg font-medium text-indigo-800 mb-3">ข้อมูลตำแหน่ง</h2>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">ตำแหน่ง X:</span>
+                        <span id="position-x" class="font-medium">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">ตำแหน่ง Y:</span>
+                        <span id="position-y" class="font-medium">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">มุม:</span>
+                        <span id="position-theta" class="font-medium">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">พิกเซล X:</span>
+                        <span id="pixel-x" class="font-medium">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">พิกเซล Y:</span>
+                        <span id="pixel-y" class="font-medium">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ข้อมูลแผนที่ -->
+            <div class="bg-blue-50 rounded-lg p-4 mb-4">
+                <h2 class="text-lg font-medium text-blue-800 mb-3">ข้อมูลแผนที่</h2>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">ความกว้าง:</span>
+                        <span id="map-width" class="font-medium">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">ความสูง:</span>
+                        <span id="map-height" class="font-medium">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">Resolution:</span>
+                        <span id="map-resolution" class="font-medium">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">จุดกำเนิด X:</span>
+                        <span id="map-origin-x" class="font-medium">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">จุดกำเนิด Y:</span>
+                        <span id="map-origin-y" class="font-medium">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ข้อมูลแบตเตอรี่ -->
+            <div class="bg-green-50 rounded-lg p-4 mb-4">
+                <h2 class="text-lg font-medium text-green-800 mb-3">สถานะแบตเตอรี่</h2>
+                
+                <div class="battery-container h-5 bg-gray-200 rounded-full mb-2">
+                    <div id="battery-level-detail" class="h-full bg-green-500 rounded-full" style="width: 0%"></div>
+                </div>
+                
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">ระดับแบตเตอรี่:</span>
+                        <span id="battery-percentage-detail" class="font-medium">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">แรงดันไฟฟ้า:</span>
+                        <span id="battery-voltage-detail" class="font-medium">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">กระแสไฟฟ้า:</span>
+                        <span id="battery-current-detail" class="font-medium">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ข้อมูลการเชื่อมต่อ -->
+            <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                <h2 class="text-lg font-medium text-gray-800 mb-3">สถานะการเชื่อมต่อ</h2>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">Socket ID:</span>
+                        <span id="socket-id" class="font-medium text-xs break-all">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">สถานะ:</span>
+                        <span id="connection-status" class="font-medium text-green-600">เชื่อมต่อแล้ว</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">ข้อมูลล่าสุด:</span>
+                        <span id="last-update" class="font-medium">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Debug Panel -->
+            <div class="bg-gray-50 rounded-lg p-4 mt-4 border border-gray-300">
+                <h2 class="text-lg font-medium text-gray-800 mb-3 flex justify-between">
+                    <span>Debug Panel</span>
+                    <button id="toggle-debug" class="text-xs bg-gray-200 px-2 py-1 rounded hover:bg-gray-300">
+                        แสดง/ซ่อน
+                    </button>
+                </h2>
+                <div id="debug-content" class="hidden">
+                    <div class="bg-black text-green-400 p-2 rounded h-32 overflow-y-auto text-xs font-mono">
+                        <div id="debug-log"></div>
+                    </div>
+                    <div class="mt-2 flex justify-between">
+                        <button id="clear-log" class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs hover:bg-gray-300">
+                            ล้างข้อมูล
+                        </button>
+                        <button id="test-socket" class="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600">
+                            ทดสอบ Socket
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ใช้ socket ที่สร้างไว้แล้วใน base.html
+    const socket = io(); // ไม่ต้องสร้างใหม่เพราะมีใน base.html แล้ว
+    
+    // ตัวแปรสำหรับเก็บข้อมูลแผนที่
+    let mapMetadata = null;
+    let mapImageLoaded = false;
+    
+    // ตัวแปรสำหรับการควบคุม (จาก manual_control.html)
+    let currentLinearSpeed = 0.15;
+    let currentAngularSpeed = 0.50;
+    let movementTimeout = null;
+    let isMoving = false;
+    
+function worldToPixel(worldX, worldY) {
+    if (!mapMetadata) return { x: 0, y: 0 };
+    
+    // ยังคงสลับแกน X และ Y เหมือนเดิม แต่กลับทิศทางของแกน Y
+    // สำหรับ worldY ใช้การลบแทนการบวก
+    const pixelX = Math.floor((-worldY - mapMetadata.origin_y) / mapMetadata.resolution);
+    const pixelY = Math.floor(mapMetadata.height - ((worldX - mapMetadata.origin_x) / mapMetadata.resolution));
+    
+    return { x: pixelX, y: pixelY };
+}
+
+function pixelToWorld(pixelX, pixelY) {
+    if (!mapMetadata) return { x: 0, y: 0 };
+    
+    // ทำการกลับแกนเช่นเดียวกับฟังก์ชัน worldToPixel
+    const worldX = (mapMetadata.height - pixelY) * mapMetadata.resolution + mapMetadata.origin_x;
+    
+    // กลับเครื่องหมายของแกน Y
+    const worldY = -(pixelX * mapMetadata.resolution + mapMetadata.origin_y);
+    
+    return { x: worldX, y: worldY };
+}
+    // Debug Functions
+    function debugLog(message) {
+        const debugLogElement = document.getElementById('debug-log');
+        if (debugLogElement) {
+            const timestamp = new Date().toLocaleTimeString();
+            debugLogElement.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            debugLogElement.scrollTop = debugLogElement.scrollHeight;
+            
+            // อัพเดทเวลาล่าสุดที่ได้รับข้อมูล
+            const lastUpdateElement = document.getElementById('last-update');
+            if (lastUpdateElement) {
+                lastUpdateElement.textContent = timestamp;
+            }
+        }
+    }
+
+    function clearDebugLog() {
+        const debugLogElement = document.getElementById('debug-log');
+        if (debugLogElement) {
+            debugLogElement.innerHTML = '';
+        }
+    }
+    
+    // DOM elements
+    const mapStatus = document.getElementById('map-status');
+    const mapCanvas = document.getElementById('map-canvas');
+    const mapOverlay = document.getElementById('map-overlay');
+    const robotMarker = document.getElementById('robot-marker');
+    const robotDirection = document.getElementById('robot-direction');
+    const goalInfo = document.getElementById('goal-info');
+    const mapCoordinates = document.getElementById('map-coordinates');
+    
+    const positionXElement = document.getElementById('position-x');
+    const positionYElement = document.getElementById('position-y');
+    const positionThetaElement = document.getElementById('position-theta');
+    const pixelXElement = document.getElementById('pixel-x');
+    const pixelYElement = document.getElementById('pixel-y');
+    
+    const mapWidthElement = document.getElementById('map-width');
+    const mapHeightElement = document.getElementById('map-height');
+    const mapResolutionElement = document.getElementById('map-resolution');
+    const mapOriginXElement = document.getElementById('map-origin-x');
+    const mapOriginYElement = document.getElementById('map-origin-y');
+    
+    const batteryLevelDetail = document.getElementById('battery-level-detail');
+    const batteryPercentageDetail = document.getElementById('battery-percentage-detail');
+    const batteryVoltageDetail = document.getElementById('battery-voltage-detail');
+    const batteryCurrentDetail = document.getElementById('battery-current-detail');
+    
+    const socketIdElement = document.getElementById('socket-id');
+    const connectionStatusElement = document.getElementById('connection-status');
+    const lastUpdateElement = document.getElementById('last-update');
+    
+    // Control elements (จาก manual_control.html)
+    const linearSpeedSlider = document.getElementById('linear-speed-slider');
+    const linearSpeedValue = document.getElementById('linear-speed-value');
+    const angularSpeedSlider = document.getElementById('angular-speed-slider');
+    const angularSpeedValue = document.getElementById('angular-speed-value');
+    const linearXDisplay = document.getElementById('linear-x');
+    const angularZDisplay = document.getElementById('angular-z');
+    const robotStatus = document.getElementById('robot-status');
+    
+    // Debug panel controls
+    const toggleDebugBtn = document.getElementById('toggle-debug');
+    const debugContent = document.getElementById('debug-content');
+    const clearLogBtn = document.getElementById('clear-log');
+    const testSocketBtn = document.getElementById('test-socket' );
+    const refreshBtn = document.getElementById('refresh-btn');
+    
+    // Map zoom settings
+    let mapZoomLevel = 1.0; // Initial zoom level
+    const MIN_ZOOM = 0.5;   // Minimum zoom level (zoomed out)
+    const MAX_ZOOM = 5.0;   // Maximum zoom level (zoomed in)
+    const ZOOM_STEP = 0.1;  // Zoom increment/decrement per scroll
+    
+    // Store last known robot position and lidar points for re-rendering after zoom
+    let lastRobotPosition = null;
+    let lastLidarPoints = null;
+    
+    // ปุ่มควบคุมทั้งหมด พร้อมค่า linear_x และ angular_z
+    const buttons = {
+        'forward': [1.0, 0.0],
+        'backward': [-1.0, 0.0],
+        'left': [0.0, 1.0],
+        'right': [0.0, -1.0],
+        'stop': [0.0, 0.0],
+        // เพิ่มปุ่มใหม่
+        'forward-left': [0.7, 0.7],    // เดินหน้าพร้อมเลี้ยวซ้าย
+        'forward-right': [0.7, -0.7],  // เดินหน้าพร้อมเลี้ยวขวา
+        'backward-left': [-0.7, 0.7],  // ถอยหลังพร้อมเลี้ยวซ้าย
+        'backward-right': [-0.7, -0.7] // ถอยหลังพร้อมเลี้ยวขวา
+    };
+
+    // Map keyboard keys to directions
+    const keyMap = {
+        'arrowup': 'forward',
+        'w': 'forward',
+        'arrowdown': 'backward',
+        's': 'backward',
+        'arrowleft': 'left',
+        'a': 'left',
+        'arrowright': 'right',
+        'd': 'right',
+        'q': 'forward-left',
+        'e': 'forward-right',
+        'z': 'backward-left',
+        'c': 'backward-right',
+        ' ': 'stop'
+    };
+
+    // Track pressed keys
+    const pressedKeys = new Set();
+    
+    // แสดง/ซ่อน debug panel
+    if (toggleDebugBtn && debugContent) {
+        toggleDebugBtn.addEventListener('click', function() {
+            debugContent.classList.toggle('hidden');
+        });
+    }
+    
+    if (clearLogBtn) {
+        clearLogBtn.addEventListener('click', clearDebugLog);
+    }
+
+    if (testSocketBtn) {
+        testSocketBtn.addEventListener('click', function() {
+            debugLog('ทดสอบ emit ไปยัง server...');
+            socket.emit('test_connection', { message: 'Hello from client' });
+        });
+    }
+    
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function() {
+            debugLog('ขอข้อมูลล่าสุด...');
+            socket.emit('request_data_update');
+            mapStatus.textContent = 'กำลังรีเฟรชข้อมูลแผนที่...';
+            mapStatus.classList.remove('bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800');
+            mapStatus.classList.add('bg-yellow-100', 'text-yellow-800');
+        });
+    }
+    
+    // อัพเดทค่าความเร็วเมื่อเลื่อน slider
+    if (linearSpeedSlider && linearSpeedValue) {
+        linearSpeedSlider.addEventListener('input', () => {
+            currentLinearSpeed = parseFloat(linearSpeedSlider.value);
+            linearSpeedValue.textContent = currentLinearSpeed.toFixed(2);
+        });
+    }
+
+    if (angularSpeedSlider && angularSpeedValue) {
+        angularSpeedSlider.addEventListener('input', () => {
+            currentAngularSpeed = parseFloat(angularSpeedSlider.value);
+            angularSpeedValue.textContent = currentAngularSpeed.toFixed(2);
+        });
+    }
+    
+    // Process current pressed keys and determine movement
+    function processKeys() {
+        if (pressedKeys.size === 0 || pressedKeys.has(' ')) {
+            // No keys pressed or spacebar is pressed - stop
+            sendVelocityCommand(0.0, 0.0);
+            return;
+        }
+        
+        // Priority to the most recently pressed key
+        // Convert Set to Array to get the last element
+        const lastKey = Array.from(pressedKeys).pop();
+        const direction = keyMap[lastKey];
+        
+        if (direction && buttons[direction]) {
+            const [linear_x, angular_z] = buttons[direction];
+            sendVelocityCommand(linear_x, angular_z);
+        }
+    }
+    
+    // Handle keyboard controls - track keys pressed
+    document.addEventListener('keydown', (e) => {
+        const key = e.key.toLowerCase();
+        if (keyMap[key]) {
+            e.preventDefault();
+            // Only add the key if it's not already in the set
+            // This prevents repeat events from affecting our logic
+            if (!pressedKeys.has(key)) {
+                pressedKeys.add(key);
+                processKeys();
+            }
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        const key = e.key.toLowerCase();
+        if (keyMap[key]) {
+            e.preventDefault();
+            pressedKeys.delete(key);
+            processKeys();
+        }
+    });
+
+    // Clear all keys when window loses focus
+    window.addEventListener('blur', () => {
+        pressedKeys.clear();
+        sendVelocityCommand(0.0, 0.0);
+    });
+    
+    // เพิ่ม Event Listener เพื่อแสดงพิกัดบนแผนที่
+    if (mapCanvas) {
+        mapCanvas.addEventListener('mousemove', function(event) {
+            if (!mapMetadata || !mapImageLoaded) return;
+            
+            const rect = mapCanvas.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+            
+            // คำนวณอัตราส่วนการ scale
+            const scaleX = mapMetadata.width / (rect.width / mapZoomLevel);
+            const scaleY = mapMetadata.height / (rect.height / mapZoomLevel);
+            
+            // คำนวณพิกัดพิกเซลที่แท้จริงบนแผนที่
+            const pixelX = Math.floor(mouseX * scaleX);
+            const pixelY = Math.floor(mouseY * scaleY);
+            
+            // แปลงเป็นพิกัดโลก
+            const worldCoords = pixelToWorld(pixelX, pixelY);
+            
+            // แสดงข้อมูลพิกัด
+            if (mapCoordinates) {
+                mapCoordinates.textContent = `พิกัดพิกเซล: (${pixelX}, ${pixelY}) | พิกัดโลก: (${worldCoords.x.toFixed(3)}, ${worldCoords.y.toFixed(3)})`;
+            }
+        });
+    }
+    
+function setupMapZoom() {
+    const mapScrollContainer = document.querySelector('.map-scroll-container');
+    if (!mapScrollContainer) return;
+    
+    // ตัวแปรสำหรับการเลื่อนแผนที่ด้วยเมาส์
+    let isDragging = false;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
+    
+    // ตัวแปรสำหรับ pinch zoom
+    let initialPinchDistance = 0;
+    let initialZoom = 1.0;
+    
+    // เพิ่ม wheel event สำหรับการซูมด้วยเมาส์
+    mapScrollContainer.addEventListener('wheel', function(event) {
+        event.preventDefault(); // ป้องกันการเลื่อนหน้า
+        
+        // กำหนดทิศทางซูม
+        const zoomIn = event.deltaY < 0;
+        
+        // อัพเดทระดับซูม
+        if (zoomIn) {
+            mapZoomLevel = Math.min(mapZoomLevel + ZOOM_STEP, MAX_ZOOM);
+        } else {
+            mapZoomLevel = Math.max(mapZoomLevel - ZOOM_STEP, MIN_ZOOM);
+        }
+        
+        // นำไปใช้กับแผนที่
+        applyMapZoom();
+        
+        // อัพเดท debug log
+        debugLog(`Map zoomed to ${(mapZoomLevel * 100).toFixed(0)}%`);
+    });
+    
+    // สำหรับอุปกรณ์สัมผัส - pinch zoom
+    mapScrollContainer.addEventListener('touchstart', function(event) {
+        if (event.touches.length === 2) {
+            // บันทึกระยะห่างเริ่มต้นระหว่างนิ้วทั้งสอง
+            initialPinchDistance = getPinchDistance(event.touches);
+            initialZoom = mapZoomLevel;
+            event.preventDefault();
+        }
+    }, { passive: false });
+    
+    mapScrollContainer.addEventListener('touchmove', function(event) {
+        if (event.touches.length === 2) {
+            event.preventDefault();
+            
+            // คำนวณระยะห่างปัจจุบันระหว่างนิ้วทั้งสอง
+            const currentDistance = getPinchDistance(event.touches);
+            
+            // คำนวณอัตราส่วนการเปลี่ยนแปลง
+            const pinchRatio = currentDistance / initialPinchDistance;
+            
+            // ปรับระดับซูมตามอัตราส่วน
+            mapZoomLevel = Math.min(Math.max(initialZoom * pinchRatio, MIN_ZOOM), MAX_ZOOM);
+            
+            // นำไปใช้กับแผนที่
+            applyMapZoom();
+            
+            debugLog(`Pinch zoom to ${(mapZoomLevel * 100).toFixed(0)}%`);
+        } else if (event.touches.length === 1) {
+            // สำหรับการเลื่อนด้วย 1 นิ้ว
+            handleMapPan(event.touches[0].clientX, event.touches[0].clientY);
+        }
+    }, { passive: false });
+    
+    mapScrollContainer.addEventListener('touchend', function(event) {
+        initialPinchDistance = 0;
+    });
+    
+    // คำนวณระยะห่างระหว่างนิ้วสองนิ้ว
+    function getPinchDistance(touches) {
+        return Math.hypot(
+            touches[0].clientX - touches[1].clientX,
+            touches[0].clientY - touches[1].clientY
+        );
+    }
+    
+    // สำหรับเดสก์ท็อป - การเลื่อนด้วยเมาส์
+    mapScrollContainer.addEventListener('mousedown', function(event) {
+        // ตรวจสอบว่าเป็นคลิกซ้ายหรือไม่ (button === 0)
+        if (event.button === 0) {
+            isDragging = true;
+            lastMouseX = event.clientX;
+            lastMouseY = event.clientY;
+            mapScrollContainer.style.cursor = 'grabbing';
+            
+            // ป้องกัน default behavior
+            event.preventDefault();
+        }
+    });
+    
+    // ติดตามการเคลื่อนที่ของเมาส์ทั่วทั้งหน้าต่าง เพื่อให้การลากทำงานได้ดีขึ้น
+    window.addEventListener('mousemove', function(event) {
+        if (isDragging) {
+            handleMapPan(event.clientX, event.clientY);
+        }
+    });
+    
+    window.addEventListener('mouseup', function() {
+        if (isDragging) {
+            isDragging = false;
+            mapScrollContainer.style.cursor = 'grab';
+        }
+    });
+    
+    // ฟังก์ชันจัดการการเลื่อนแผนที่
+    function handleMapPan(currentX, currentY) {
+        if (lastMouseX === 0 && lastMouseY === 0) {
+            lastMouseX = currentX;
+            lastMouseY = currentY;
+            return;
+        }
+        
+        // คำนวณระยะทางที่เลื่อน
+        const deltaX = currentX - lastMouseX;
+        const deltaY = currentY - lastMouseY;
+        
+        // อัพเดทตำแหน่งการเลื่อน
+        mapScrollContainer.scrollLeft -= deltaX;
+        mapScrollContainer.scrollTop -= deltaY;
+        
+        // อัพเดทตำแหน่งล่าสุด
+        lastMouseX = currentX;
+        lastMouseY = currentY;
+    }
+    
+    // เพิ่มสไตล์เคอร์เซอร์เพื่อให้สื่อถึงการสามารถลากได้
+    mapScrollContainer.style.cursor = 'grab';
+    
+    // เพิ่ม double-click สำหรับการซูมเข้า
+    mapScrollContainer.addEventListener('dblclick', function(event) {
+        event.preventDefault();
+        
+        // ซูมเข้า
+        mapZoomLevel = Math.min(mapZoomLevel + 0.3, MAX_ZOOM);
+        
+        // นำไปใช้
+        applyMapZoom();
+        debugLog(`Double-click zoom in to ${(mapZoomLevel * 100).toFixed(0)}%`);
+    });
+}
+
+// เป็น:
+function applyMapZoom() {
+    if (!mapCanvas || !mapOverlay) return;
+    
+    const mapScrollContainer = document.querySelector('.map-scroll-container');
+    if (!mapScrollContainer) return;
+    
+    // จัดเก็บตำแหน่งการเลื่อนเดิมและขนาดที่มองเห็น
+    const scrollX = mapScrollContainer.scrollLeft;
+    const scrollY = mapScrollContainer.scrollTop;
+    const containerWidth = mapScrollContainer.clientWidth;
+    const containerHeight = mapScrollContainer.clientHeight;
+    
+    // คำนวณจุดกึ่งกลางปัจจุบันในเทอมของเปอร์เซ็นต์
+    const scrollCenterXPercent = (scrollX + containerWidth / 2) / mapScrollContainer.scrollWidth;
+    const scrollCenterYPercent = (scrollY + containerHeight / 2) / mapScrollContainer.scrollHeight;
+    
+    // คำนวณขนาดใหม่
+    const originalWidth = mapMetadata ? mapMetadata.width : mapCanvas.naturalWidth;
+    const originalHeight = mapMetadata ? mapMetadata.height : mapCanvas.naturalHeight;
+    
+    const newWidth = originalWidth * mapZoomLevel;
+    const newHeight = originalHeight * mapZoomLevel;
+    
+    // ประยุกต์ใช้ขนาดใหม่กับ map wrapper
+    const mapWrapper = document.querySelector('.map-wrapper');
+    if (mapWrapper) {
+        mapWrapper.style.width = `${newWidth}px`;
+        mapWrapper.style.height = `${newHeight}px`;
+    }
+    
+    // ประยุกต์ใช้ขนาดใหม่กับภาพแผนที่
+    mapCanvas.style.width = `${newWidth}px`;
+    mapCanvas.style.height = `${newHeight}px`;
+    
+    // ประยุกต์ใช้ขนาดเดียวกันกับ overlay
+    mapOverlay.style.width = `${newWidth}px`;
+    mapOverlay.style.height = `${newHeight}px`;
+    
+    // อัพเดทองค์ประกอบ overlay
+    updateMapOverlayElements();
+    
+    // รอให้ DOM อัพเดทแล้วจึงค่อยเลื่อนกลับไปที่จุดกึ่งกลางเดิม
+    setTimeout(() => {
+        // คำนวณตำแหน่งการเลื่อนใหม่เพื่อรักษาจุดกึ่งกลาง
+        const newScrollX = (mapScrollContainer.scrollWidth * scrollCenterXPercent) - (containerWidth / 2);
+        const newScrollY = (mapScrollContainer.scrollHeight * scrollCenterYPercent) - (containerHeight / 2);
+        
+        // ตั้งค่าตำแหน่งการเลื่อนใหม่
+        mapScrollContainer.scrollLeft = newScrollX;
+        mapScrollContainer.scrollTop = newScrollY;
+    }, 0);
+}
+
+    // Update all overlay elements after zoom change
+    function updateMapOverlayElements() {
+        // Re-render robot position
+        if (lastRobotPosition) {
+            updateRobotPosition(lastRobotPosition);
+        }
+        
+        // Re-render lidar points
+        if (lastLidarPoints) {
+            updateLidarVisualization(lastLidarPoints);
+        }
+        
+        // Re-render goal markers
+        const goalMarkers = document.querySelectorAll('.goal-marker');
+        if (goalMarkers.length > 0 && mapMetadata) {
+            goalMarkers.forEach(marker => {
+                // Extract the world coordinates from the marker's data attributes
+                const worldX = parseFloat(marker.dataset.worldX);
+                const worldY = parseFloat(marker.dataset.worldY);
+                
+                // Recalculate position with new zoom
+                const pixelCoords = worldToPixel(worldX, worldY);
+                const rect = mapCanvas.getBoundingClientRect();
+                const scaleX = rect.width / mapMetadata.width;
+                const scaleY = rect.height / mapMetadata.height;
+                
+                marker.style.left = (pixelCoords.x * scaleX) + 'px';
+                marker.style.top = (pixelCoords.y * scaleY) + 'px';
+            });
+        }
+    }
+
+    // ฟังก์ชันส่งคำสั่งความเร็ว (จาก manual_control.html)
+    function sendVelocityCommand(linear_x_ratio, angular_z_ratio) {
+        // Cancel any previous pending movement
+        if (movementTimeout) {
+            clearTimeout(movementTimeout);
+        }
+
+        // คำนวณความเร็วจริงโดยคูณด้วยค่าความเร็วที่ตั้งไว้
+        const linear_x = linear_x_ratio * currentLinearSpeed;
+        const angular_z = angular_z_ratio * currentAngularSpeed;
+        
+        debugLog(`Sending velocity command: linear_x=${linear_x.toFixed(3)}, angular_z=${angular_z.toFixed(3)}`);
+        
+        // Immediate execution to reduce perceived delay
+        fetch('/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                linear_x: linear_x,
+                angular_z: angular_z
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (linearXDisplay) linearXDisplay.textContent = data.linear_x.toFixed(2);
+            if (angularZDisplay) angularZDisplay.textContent = data.angular_z.toFixed(2);
+            
+            // Update robot status
+            if (robotStatus) {
+                if (data.linear_x === 0 && data.angular_z === 0) {
+                    robotStatus.textContent = 'หยุดนิ่ง';
+                    robotStatus.className = 'font-medium text-gray-600';
+                    isMoving = false;
+                } else {
+                    robotStatus.textContent = 'กำลังเคลื่อนที่';
+                    robotStatus.className = 'font-medium text-green-600';
+                    isMoving = true;
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            if (robotStatus) {
+                robotStatus.textContent = 'เกิดข้อผิดพลาด';
+                robotStatus.className = 'font-medium text-red-600';
+            }
+            isMoving = false;
+        });
+        
+        // Also send via socket.io as a fallback or alternative method
+        socket.emit('cmd_vel', { linear_x, angular_z });
+    }
+
+    // ตัวแปรสำหรับจับสถานะการกดปุ่ม
+    let isTouchDown = false;
+    
+    // Setup control buttons
+    function setupControlButtons() {
+        // ปุ่มควบคุมทั้งหมด
+        Object.keys(buttons).forEach(btnId => {
+            const btn = document.getElementById(btnId);
+            if (btn) {
+                const [linear_x, angular_z] = buttons[btnId];
+                
+                // Pointerdown/pointerup for unified touch and mouse handling
+                btn.addEventListener('pointerdown', (e) => {
+                    e.preventDefault();
+                    isTouchDown = true;
+                    
+                    if (btnId !== 'stop') {
+                        sendVelocityCommand(linear_x, angular_z);
+                    } else {
+                        sendVelocityCommand(0.0, 0.0);
+                    }
+                });
+                
+                btn.addEventListener('pointerup', () => {
+                    if (isTouchDown) {
+                        isTouchDown = false;
+                        sendVelocityCommand(0.0, 0.0);
+                    }
+                });
+                
+                btn.addEventListener('pointerleave', () => {
+                    if (isTouchDown) {
+                        isTouchDown = false;
+                        sendVelocityCommand(0.0, 0.0);
+                    }
+                });
+                
+                // Prevent context menu on long press
+                btn.addEventListener('contextmenu', (e) => e.preventDefault());
+            }
+        });
+    }
+
+    // Socket.io events
+    if (socket) {
+        // เมื่อเชื่อมต่อสำเร็จ
+        socket.on('connect', function() {
+            debugLog('Socket connected: ' + socket.id);
+            if (socketIdElement) socketIdElement.textContent = socket.id;
+            if (connectionStatusElement) {
+                connectionStatusElement.textContent = 'เชื่อมต่อแล้ว';
+                connectionStatusElement.classList.remove('text-red-600');
+                connectionStatusElement.classList.add('text-green-600');
+            }
+            
+            mapStatus.textContent = 'เชื่อมต่อกับ WebSocket สำเร็จ กำลังรอข้อมูลแผนที่...';
+            mapStatus.classList.remove('bg-red-100', 'text-red-800');
+            mapStatus.classList.add('bg-yellow-100', 'text-yellow-800');
+            
+            // เพิ่มบรรทัดเหล่านี้เพื่อขอข้อมูลแผนที่อัตโนมัติเมื่อเชื่อมต่อสำเร็จ
+            debugLog('Automatically requesting map data...');
+            socket.emit('request_map');
+            socket.emit('request_real_map');
+            socket.emit('request_data_update');
+            
+            // Setup frequent updates to fix lag issues
+            setupFrequentUpdates();
+        });
+        
+        // เมื่อการเชื่อมต่อถูกตัด
+        socket.on('disconnect', function() {
+            debugLog('Socket disconnected');
+            if (connectionStatusElement) {
+                connectionStatusElement.textContent = 'ขาดการเชื่อมต่อ';
+                connectionStatusElement.classList.remove('text-green-600');
+                connectionStatusElement.classList.add('text-red-600');
+            }
+            
+            mapStatus.textContent = 'ขาดการเชื่อมต่อกับ ROS2 WebSocket';
+            mapStatus.classList.remove('bg-green-100', 'text-green-800', 'bg-yellow-100', 'text-yellow-800');
+            mapStatus.classList.add('bg-red-100', 'text-red-800');
+        });
+        
+        // รับข้อมูลการแสดงผลทั้งหมด
+        socket.on('robot_visualization', function(data) {
+            debugLog('Received robot_visualization data');
+            
+            // อัพเดทสถานะการเชื่อมต่อ
+            mapStatus.textContent = 'เชื่อมต่อข้อมูลแผนที่สำเร็จ';
+            mapStatus.classList.remove('bg-yellow-100', 'text-yellow-800', 'bg-red-100', 'text-red-800');
+            mapStatus.classList.add('bg-green-100', 'text-green-800');
+            
+            // อัพเดทข้อมูลแผนที่
+            if (data.map) {
+                updateMapVisualization(data.map);
+            }
+            
+            // อัพเดทข้อมูลตำแหน่งหุ่นยนต์
+            if (data.robot) {
+                updateRobotPosition(data.robot);
+            }
+            
+            // อัพเดทข้อมูลไลดาร์
+            if (data.lidar && data.lidar.map_points) {
+                updateLidarVisualization(data.lidar.map_points);
+            }
+            
+            // อัพเดทข้อมูลแบตเตอรี่
+            if (data.battery) {
+                updateBatteryStatus(data.battery);
+            }
+        });
+        
+        // รับแผนที่แยก (เผื่อ server ส่งแยก)
+        socket.on('ros_map', function(data) {
+            debugLog('Received ros_map data with image size: ' + (data.image ? data.image.length : 0) + ' bytes');
+            
+            if (data.metadata) {
+                mapMetadata = data.metadata;
+                updateMapMetadataDisplay();
+                debugLog('Map metadata updated: ' + 
+                        'width=' + mapMetadata.width + 
+                        ', height=' + mapMetadata.height + 
+                        ', resolution=' + mapMetadata.resolution);
+            }
+            
+            if (data.image) {
+                // อัพเดตภาพแผนที่
+                mapCanvas.onload = function() {
+                    mapImageLoaded = true;
+                    debugLog('Map image loaded successfully');
+                    
+                    // ปรับขนาด overlay ให้ตรงกับขนาดรูปภาพ
+                    const rect = mapCanvas.getBoundingClientRect();
+                    mapOverlay.style.width = rect.width + 'px';
+                    mapOverlay.style.height = rect.height + 'px';
+                    
+                    // อัพเดตสถานะหลังจากโหลดภาพเสร็จ
+                    mapStatus.textContent = 'ได้รับข้อมูลแผนที่เรียบร้อยแล้ว';
+                    mapStatus.classList.remove('bg-yellow-100', 'text-yellow-800', 'bg-red-100', 'text-red-800');
+                    mapStatus.classList.add('bg-green-100', 'text-green-800');
+                    
+                    // เริ่มการตั้งค่า zoom หลังจากโหลดแผนที่เสร็จ
+                    setupMapZoom();
+                };
+                
+                mapCanvas.src = 'data:image/png;base64,' + data.image;
+            }
+        });
+        
+        // รับตำแหน่งหุ่นยนต์แยก (เผื่อ server ส่งแยก)
+        socket.on('ros_pose', function(data) {
+            debugLog('Received ros_pose data');
+            updateRobotPosition(data);
+        });
+        
+        // รับข้อมูลไลดาร์แยก (เผื่อ server ส่งแยก)
+        socket.on('ros_lidar', function(data) {
+            debugLog('Received ros_lidar data');
+            if (data.map_points) {
+                updateLidarVisualization(data.map_points);
+            }
+        });
+        
+        // รับตำแหน่งหุ่นยนต์บนแผนที่แยก (เผื่อ server ส่งแยก)
+        socket.on('robot_position', function(data) {
+            debugLog('Received robot_position data');
+            updateRobotPosition(data);
+        });
+        
+        // รับจุดไลดาร์บนแผนที่แยก (เผื่อ server ส่งแยก)
+        socket.on('lidar_on_map', function(data) {
+            debugLog('Received lidar_on_map data');
+            if (data.points) {
+                updateLidarVisualization(data.points);
+            }
+        });
+        
+        // ทดสอบรับข้อมูลแบตเตอรี่
+        socket.on('ros_battery', function(data) {
+            debugLog('Received ros_battery data: ' + JSON.stringify(data));
+            updateBatteryStatus(data);
+        });
+        
+        // ทดสอบรับข้อมูลแบตเตอรี่ (เผื่อ topic ชื่อ ros_battery_message)
+        socket.on('ros_battery_message', function(message) {
+            debugLog('Received ros_battery_message: ' + JSON.stringify(message));
+            // ถ้า message มี format เป็น { data: 85.5 }
+            if (message && typeof message.data !== 'undefined') {
+                updateBatteryStatus({ percentage: message.data, voltage: message.voltage, current: message.current });
+            }
+        });
+        
+        // รับสถานะการนำทาง
+        socket.on('nav_status', function(data) {
+            debugLog('Received nav_status: ' + JSON.stringify(data));
+            if (data.status === 'success') {
+                goalInfo.textContent = 'ถึงเป้าหมายแล้ว';
+                goalInfo.classList.remove('bg-blue-50', 'text-blue-700', 'bg-red-50', 'text-red-700');
+                goalInfo.classList.add('bg-green-50', 'text-green-700');
+            }
+            // } else if (data.status === 'failed') {
+            //     goalInfo.textContent = 'การนำทางล้มเหลว';
+            //     goalInfo.classList.remove('bg-blue-50', 'text-blue-700', 'bg-green-50', 'text-green-700');
+            //     goalInfo.classList.add('bg-red-50', 'text-red-700');
+            // }
+        });
+        
+        // รับการตอบกลับจากการทดสอบ socket
+        socket.on('test_response', function(data) {
+            debugLog('Test response: ' + JSON.stringify(data));
+        });
+    } else {
+        debugLog('Socket.io ไม่พร้อมใช้งาน');
+        mapStatus.textContent = 'ไม่สามารถเชื่อมต่อกับ Socket.io ได้';
+        mapStatus.classList.remove('bg-yellow-100', 'text-yellow-800', 'bg-green-100', 'text-green-800');
+        mapStatus.classList.add('bg-red-100', 'text-red-800');
+    }
+    
+    // Create a more frequent position update request
+    function setupFrequentUpdates() {
+        // Request updates more frequently (every 100ms)
+        const updateInterval = setInterval(() => {
+            if (socket && socket.connected) {
+                socket.emit('request_data_update');
+            }
+        }, 100);
+        
+        // Clean up interval on page unload
+        window.addEventListener('beforeunload', () => clearInterval(updateInterval));
+    }
+    
+    // อัพเดทการแสดงผลข้อมูล metadata ของแผนที่
+    function updateMapMetadataDisplay() {
+        if (!mapMetadata) return;
+        
+        if (mapWidthElement) mapWidthElement.textContent = mapMetadata.width + ' พิกเซล';
+        if (mapHeightElement) mapHeightElement.textContent = mapMetadata.height + ' พิกเซล';
+        if (mapResolutionElement) mapResolutionElement.textContent = mapMetadata.resolution + ' ม./พิกเซล';
+        if (mapOriginXElement) mapOriginXElement.textContent = mapMetadata.origin_x.toFixed(3) + ' ม.';
+        if (mapOriginYElement) mapOriginYElement.textContent = mapMetadata.origin_y.toFixed(3) + ' ม.';
+    }
+
+    function fitMapToContainer() {
+    debugLog('Attempting to fit map to container');
+    
+    if (!mapCanvas || !mapMetadata) {
+        debugLog('mapCanvas or mapMetadata is not ready');
+        return;
+    }
+
+    const scrollContainer = document.querySelector('.map-scroll-container');
+    if (!scrollContainer) {
+        debugLog('mapScrollContainer not found');
+        return;
+    }
+
+    // คำนวณขนาดที่แท้จริงของคอนเทนเนอร์
+    const containerWidth = scrollContainer.clientWidth;
+    const containerHeight = scrollContainer.clientHeight;
+
+    debugLog(`Container size: ${containerWidth} x ${containerHeight}`);
+    debugLog(`Map metadata size: ${mapMetadata.width} x ${mapMetadata.height}`);
+
+    // คำนวณอัตราส่วนการซูม
+    const scaleX = containerWidth / mapMetadata.width;
+    const scaleY = containerHeight / mapMetadata.height;
+    
+    // เลือกอัตราส่วนที่เล็กกว่า เพื่อให้แผนที่พอดีทั้งหมด
+    mapZoomLevel = Math.min(scaleX, scaleY);
+
+    // จำกัดขอบเขตการซูม
+    mapZoomLevel = Math.max(Math.min(mapZoomLevel, MAX_ZOOM), MIN_ZOOM);
+
+    debugLog(`Calculated zoom level: ${mapZoomLevel}`);
+
+    // นำไปใช้กับแผนที่
+    applyMapZoom();
+
+    // เลื่อนแผนที่ให้อยู่กึ่งกลาง
+    const mapWrapper = document.querySelector('.map-wrapper');
+    
+    if (scrollContainer && mapWrapper) {
+        const wrapperWidth = mapWrapper.clientWidth;
+        const wrapperHeight = mapWrapper.clientHeight;
+        
+        // คำนวณตำแหน่งการเลื่อนเพื่อให้อยู่กึ่งกลาง
+        const scrollLeft = (wrapperWidth - containerWidth) / 2;
+        const scrollTop = (wrapperHeight - containerHeight) / 2;
+        
+        scrollContainer.scrollLeft = scrollLeft;
+        scrollContainer.scrollTop = scrollTop;
+    }
+
+    debugLog(`Initial map zoom set to ${(mapZoomLevel * 100).toFixed(0)}%`);
+}
+
+// แก้ไขฟังก์ชัน updateMapVisualization
+function updateMapVisualization(mapData) {
+    debugLog('Updating map visualization');
+    
+    if (mapData.metadata) {
+        mapMetadata = mapData.metadata;
+        updateMapMetadataDisplay();
+    }
+    
+    if (mapData.image) {
+        mapCanvas.onload = function() {
+            mapImageLoaded = true;
+            
+            // ปรับขนาด overlay ให้ตรงกับขนาดรูปภาพ
+            const rect = mapCanvas.getBoundingClientRect();
+            mapOverlay.style.width = rect.width + 'px';
+            mapOverlay.style.height = rect.height + 'px';
+            
+            // อัพเดตสถานะหลังจากโหลดภาพเสร็จ
+            mapStatus.textContent = 'ได้รับข้อมูลแผนที่เรียบร้อยแล้ว';
+            mapStatus.classList.remove('bg-yellow-100', 'text-yellow-800', 'bg-red-100', 'text-red-800');
+            mapStatus.classList.add('bg-green-100', 'text-green-800');
+            
+            // เริ่มการตั้งค่า zoom หลังจากโหลดแผนที่เสร็จ
+            setupMapZoom();
+            
+            // รออย่างน้อย 100ms เพื่อให้แน่ใจว่า DOM โหลดเสร็จ
+            // fitMapToContainer()
+        };
+        
+        mapCanvas.src = 'data:image/png;base64,' + mapData.image;
+    }
+}
+
+// เพิ่มการตรวจสอบเมื่อโหลดหน้าเว็บ
+document.addEventListener('DOMContentLoaded', function() {
+    debugLog('DOM loaded, initializing control system');
+    
+    // Setup control buttons
+    setupControlButtons();
+    
+    // ลองซูมเต็มหน้าจออีกครั้งหลัง 1 วินาที
+    setTimeout(function() {
+        if (mapMetadata && mapImageLoaded) {
+            fitMapToContainer();
+        }
+    }, 100);
+    
+    // Request initial map data
+    setTimeout(function() {
+        socket.emit('request_data_update');
+    }, 50);
+});
+
+    
+    // ฟังก์ชันอัพเดทตำแหน่งหุ่นยนต์
+    function updateRobotPosition(robotData) {
+        debugLog('Updating robot position');
+        
+        // Store the position data
+        lastRobotPosition = { ...robotData };
+        
+        // อัพเดทข้อมูลบนหน้าเว็บ
+        if (positionXElement && positionYElement && positionThetaElement) {
+            positionXElement.textContent = (robotData.x !== undefined ? robotData.x.toFixed(3) : '-') + ' ม.';
+            positionYElement.textContent = (robotData.y !== undefined ? robotData.y.toFixed(3) : '-') + ' ม.';
+            positionThetaElement.textContent = ((robotData.theta) !== undefined ? robotData.theta.toFixed(3) : '-') + ' องศา';
+        }
+        
+        if (pixelXElement && pixelYElement && robotData.pixel_x !== undefined && robotData.pixel_y !== undefined) {
+            pixelXElement.textContent = robotData.pixel_x;
+            pixelYElement.textContent = robotData.pixel_y;
+        }
+        
+        // ถ้าไม่มีข้อมูลพิกเซล แต่มีข้อมูลตำแหน่งโลก ให้คำนวณพิกเซลเอง
+        if (robotData.x !== undefined && robotData.y !== undefined && robotData.pixel_x === undefined && mapMetadata) {
+            const pixelCoords = worldToPixel(robotData.x, robotData.y);
+            robotData.pixel_x = pixelCoords.x;
+            robotData.pixel_y = pixelCoords.y;
+            
+            if (pixelXElement && pixelYElement) {
+                pixelXElement.textContent = pixelCoords.x;
+                pixelYElement.textContent = pixelCoords.y;
+            }
+        }
+        
+        // แสดงตำแหน่งหุ่นยนต์บนแผนที่
+        if (robotData.pixel_x !== undefined && robotData.pixel_y !== undefined && mapCanvas && robotMarker && robotDirection) {
+            const rect = mapCanvas.getBoundingClientRect();
+            
+            // คำนวณอัตราส่วนการ scale
+            const scaleX = rect.width / (mapMetadata ? mapMetadata.width : rect.width);
+            const scaleY = rect.height / (mapMetadata ? mapMetadata.height : rect.height);
+            
+            // ปรับตำแหน่งตามอัตราส่วนการแสดงผล
+            const displayX = robotData.pixel_x * scaleX;
+            const displayY = robotData.pixel_y * scaleY;
+            
+            robotMarker.classList.remove('hidden');
+            robotMarker.style.left = displayX + 'px';
+            robotMarker.style.top = displayY + 'px';
+            
+            // แสดงทิศทางของหุ่นยนต์
+            if (robotData.theta !== undefined) {
+                robotDirection.classList.remove('hidden');
+                robotDirection.style.left = displayX + 'px';
+                robotDirection.style.top = displayY + 'px';
+                robotDirection.style.width = '20px';
+                robotDirection.style.transform = `translate(0, 0) rotate(${-1*(robotData.theta+90)}deg)`;
+                robotDirection.style.transformOrigin = '0 50%';
+            }
+            
+            debugLog(`Robot displayed at pixel (${displayX.toFixed(1)}, ${displayY.toFixed(1)}) scaled from (${robotData.pixel_x}, ${robotData.pixel_y})`);
+        }
+    }
+    
+    // ฟังก์ชันอัพเดทการแสดงผลไลดาร์
+    function updateLidarVisualization(lidarMapPoints) {
+        debugLog('Updating lidar visualization');
+        
+        // Store the lidar points
+        lastLidarPoints = [...lidarMapPoints];
+        
+        // ลบจุดไลดาร์เก่า
+        const oldPoints = document.querySelectorAll('.lidar-point');
+        oldPoints.forEach(point => point.remove());
+        
+        if (!mapCanvas || !mapOverlay) return;
+        
+        // คำนวณอัตราส่วนการ scale
+        const rect = mapCanvas.getBoundingClientRect();
+        const scaleX = rect.width / (mapMetadata ? mapMetadata.width : rect.width);
+        const scaleY = rect.height / (mapMetadata ? mapMetadata.height : rect.height);
+        
+        // เพิ่มจุดไลดาร์ใหม่
+        lidarMapPoints.forEach(point => {
+            const displayX = point.pixel_x * scaleX;
+            const displayY = point.pixel_y * scaleY;
+            
+            const lidarPoint = document.createElement('div');
+            lidarPoint.className = 'lidar-point absolute w-1 h-1 bg-blue-500 opacity-60 rounded-full transform -translate-x-1/2 -translate-y-1/2 z-5';
+            lidarPoint.style.left = displayX + 'px';
+            lidarPoint.style.top = displayY + 'px';
+            mapOverlay.appendChild(lidarPoint);
+        });
+    }
+    
+    // ฟังก์ชันอัพเดทสถานะแบตเตอรี่
+    function updateBatteryStatus(batteryData) {
+        debugLog('Updating battery status: ' + JSON.stringify(batteryData));
+        
+        // อัพเดทแถบแสดงระดับแบตเตอรี่
+        const percentage = batteryData.percentage || 0;
+        
+        if (batteryLevelDetail) {
+            batteryLevelDetail.style.width = percentage + '%';
+            
+            // อัพเดทสีตามระดับแบตเตอรี่
+            batteryLevelDetail.classList.remove('bg-red-500', 'bg-yellow-500', 'bg-green-500');
+            if (percentage <= 20) {
+                batteryLevelDetail.classList.add('bg-red-500');
+            } else if (percentage <= 50) {
+                batteryLevelDetail.classList.add('bg-yellow-500');
+            } else {
+                batteryLevelDetail.classList.add('bg-green-500');
+            }
+        }
+        
+        // อัพเดทข้อความแสดงระดับแบตเตอรี่
+        if (batteryPercentageDetail) {
+            batteryPercentageDetail.textContent = percentage.toFixed(1) + '%';
+        }
+        
+        if (batteryVoltageDetail && batteryData.voltage !== undefined) {
+            batteryVoltageDetail.textContent = batteryData.voltage.toFixed(2) + ' V';
+        }
+
+        if (batteryCurrentDetail && batteryData.current !== undefined) {
+            batteryCurrentDetail.textContent = batteryData.current.toFixed(2) + ' A';
+        }
+        
+        // อัพเดท battery-level และ battery-percentage ใน navbar (ถ้ามี) 
+        // เพื่อรักษาความสอดคล้องกับระบบ battery ที่มีอยู่แล้วใน base.html
+        const batteryLevel = document.getElementById('battery-level');
+        const batteryPercentage = document.getElementById('battery-percentage');
+        
+        if (batteryLevel && batteryPercentage) {
+            batteryLevel.style.width = percentage + '%';
+            batteryPercentage.textContent = Math.round(percentage) + '%';
+            
+            if (percentage <= 20) {
+                batteryLevel.classList.remove('battery-medium', 'battery-high');
+                batteryLevel.classList.add('battery-low');
+            } else if (percentage <= 50) {
+                batteryLevel.classList.remove('battery-low', 'battery-high');
+                batteryLevel.classList.add('battery-medium');
+            } else {
+                batteryLevel.classList.remove('battery-low', 'battery-medium');
+                batteryLevel.classList.add('battery-high');
+            }
+        }
+    }
+
+// ตัวแปรสำหรับจัดการการกดค้าง
+let longPressTimer = null;
+const LONG_PRESS_DURATION = 750; // 500 มิลลิวินาที
+
+// เพิ่มการสนับสนุนการกดค้าง
+// เพิ่ม CSS เพื่อป้องกันการเซฟรูป
+mapCanvas.style.userSelect = 'none';
+mapCanvas.style.webkitUserSelect = 'none';
+mapCanvas.style.userDrag = 'none';
+mapCanvas.style.webkitUserDrag = 'none';
+
+mapCanvas.addEventListener('touchstart', function(event) {
+    // ป้องกันการทำงานของ default touch events
+    event.preventDefault();
+    
+    // ป้องกันการเซฟรูปบน iOS
+    if (event.touches.length === 1) {
+        event.target.addEventListener('touchmove', preventDefaultTouchMove, { passive: false });
+    }
+    
+    // เริ่มจับเวลาการกดค้าง
+    longPressTimer = setTimeout(() => {
+        // ตรวจสอบว่ามีข้อมูลแผนที่หรือไม่
+        if (!mapMetadata || !mapImageLoaded) {
+            debugLog('Map metadata not available yet or image not loaded');
+            return;
+        }
+        
+        // Get touch position relative to the image
+        const rect = mapCanvas.getBoundingClientRect();
+        const touchX = event.touches[0].clientX - rect.left;
+        const touchY = event.touches[0].clientY - rect.top;
+        
+        // Calculate pixel coordinates accounting for zoom
+        const pixelX = touchX / mapZoomLevel;
+        const pixelY = touchY / mapZoomLevel;
+        
+        debugLog(`Long-pressed at precise pixel position: (${pixelX}, ${pixelY})`);
+        
+        // Convert to world coordinates
+        const worldCoords = pixelToWorld(pixelX, pixelY);
+        const worldX = worldCoords.x;
+        const worldY = worldCoords.y;
+        
+        debugLog(`Sending precise navigation goal to: (${worldX}, ${worldY})`);
+        
+        // ส่งค่าพิกัดแบบละเอียด โดยไม่จำกัดทศนิยม
+        socket.emit('nav_goal', {
+            x: worldX,
+            y: worldY,
+            theta: 0
+        });
+        
+        // Update goal info text
+        goalInfo.textContent = `กำลังนำทางไปยังพิกัด (${worldX.toFixed(6)}, ${worldY.toFixed(6)})`;
+        goalInfo.classList.remove('bg-green-50', 'text-green-700', 'bg-red-50', 'text-red-700');
+        goalInfo.classList.add('bg-blue-50', 'text-blue-700');
+
+        // Remove old goal markers
+        const oldGoals = document.querySelectorAll('.goal-marker');
+        oldGoals.forEach(marker => marker.remove());
+        
+        // Create new goal marker with stored world coordinates
+        const goalMarker = document.createElement('div');
+        goalMarker.className = 'absolute w-3 h-3 bg-yellow-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 z-8 goal-marker';
+        goalMarker.style.left = touchX + 'px';
+        goalMarker.style.top = touchY + 'px';
+        
+        // Store world coordinates as data attributes for recalculation during zoom
+        goalMarker.dataset.worldX = worldX;
+        goalMarker.dataset.worldY = worldY;
+        
+        mapOverlay.appendChild(goalMarker);
+    }, LONG_PRESS_DURATION);
+});
+
+// ยกเลิกการจับเวลาหากเลื่อนนิ้วหรือยกนิ้วก่อนหมดเวลา
+// ฟังก์ชันป้องกันการเลื่อนค่าเริ่มต้น
+function preventDefaultTouchMove(e) {
+    e.preventDefault();
+}
+
+mapCanvas.addEventListener('touchmove', function() {
+    clearTimeout(longPressTimer);
+    // ลบ event listener ที่ป้องกันการเซฟรูป
+    event.target.removeEventListener('touchmove', preventDefaultTouchMove, { passive: false });
+});
+
+mapCanvas.addEventListener('touchend', function() {
+    clearTimeout(longPressTimer);
+    // ลบ event listener ที่ป้องกันการเซฟรูป
+    event.target.removeEventListener('touchmove', preventDefaultTouchMove, { passive: false });
+});
+
+// กรณี mouse-based devices
+mapCanvas.addEventListener('mousedown', function(event) {
+    // ตรวจสอบว่าเป็นคลิกขวาหรือไม่
+    if (event.button === 2) {
+        event.preventDefault();
+        
+        // ตรวจสอบว่ามีข้อมูลแผนที่หรือไม่
+        if (!mapMetadata || !mapImageLoaded) {
+            debugLog('Map metadata not available yet or image not loaded');
+            return;
+        }
+        
+        // Get click position relative to the image
+        const rect = mapCanvas.getBoundingClientRect();
+        const clickX = event.clientX - rect.left;
+        const clickY = event.clientY - rect.top;
+        
+        // Calculate pixel coordinates accounting for zoom
+        const pixelX = clickX / mapZoomLevel;
+        const pixelY = clickY / mapZoomLevel;
+        
+        debugLog(`Right-clicked at precise pixel position: (${pixelX}, ${pixelY})`);
+        
+        // Convert to world coordinates
+        const worldCoords = pixelToWorld(pixelX, pixelY);
+        const worldX = worldCoords.x;
+        const worldY = worldCoords.y;
+        
+        debugLog(`Sending precise navigation goal to: (${worldX}, ${worldY})`);
+        
+        // ส่งค่าพิกัดแบบละเอียด โดยไม่จำกัดทศนิยม
+        socket.emit('nav_goal', {
+            x: worldX,
+            y: worldY,
+            theta: 0
+        });
+        
+        // Update goal info text
+        goalInfo.textContent = `กำลังนำทางไปยังพิกัด (${worldX.toFixed(6)}, ${worldY.toFixed(6)})`;
+        goalInfo.classList.remove('bg-green-50', 'text-green-700', 'bg-red-50', 'text-red-700');
+        goalInfo.classList.add('bg-blue-50', 'text-blue-700');
+
+        // Remove old goal markers
+        const oldGoals = document.querySelectorAll('.goal-marker');
+        oldGoals.forEach(marker => marker.remove());
+        
+        // Create new goal marker with stored world coordinates
+        const goalMarker = document.createElement('div');
+        goalMarker.className = 'absolute w-3 h-3 bg-yellow-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 z-8 goal-marker';
+        goalMarker.style.left = clickX + 'px';
+        goalMarker.style.top = clickY + 'px';
+        
+        // Store world coordinates as data attributes for recalculation during zoom
+        goalMarker.dataset.worldX = worldX;
+        goalMarker.dataset.worldY = worldY;
+        
+        mapOverlay.appendChild(goalMarker);
+    }
+});
+
+// ป้องกัน default context menu สำหรับทั้ง touch และ mouse
+mapCanvas.addEventListener('contextmenu', function(event) {
+    event.preventDefault();
+});
+
+    // Modified click handler for setting navigation goals
+mapCanvas.addEventListener('click', function(event) {
+    // ไม่ทำอะไรเพื่อให้สามารถใช้คลิกซ้ายลากแผนที่ได้
+});
+
+// เพิ่ม event listener สำหรับคลิกขวา
+mapCanvas.addEventListener('contextmenu', function(event) {
+    // ป้องกันเมนูคลิกขวาปกติของเบราว์เซอร์
+    event.preventDefault();
+    
+    // ตรวจสอบว่ามีข้อมูลแผนที่หรือไม่
+    if (!mapMetadata || !mapImageLoaded) {
+        debugLog('Map metadata not available yet or image not loaded');
+        return;
+    }
+    
+    // Get click position relative to the image
+    const rect = mapCanvas.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const clickY = event.clientY - rect.top;
+    
+    // Calculate pixel coordinates accounting for zoom - ไม่ใช้ Math.floor เพื่อรักษาทศนิยม
+    const pixelX = clickX / mapZoomLevel;
+    const pixelY = clickY / mapZoomLevel;
+    
+    debugLog(`Right-clicked at precise pixel position: (${pixelX}, ${pixelY})`);
+    
+    // Convert to world coordinates
+    const worldCoords = pixelToWorld(pixelX, pixelY);
+    const worldX = worldCoords.x;
+    const worldY = worldCoords.y;
+    
+    debugLog(`Sending precise navigation goal to: (${worldX}, ${worldY})`);
+    
+// ส่งค่าพิกัดแบบละเอียด โดยไม่จำกัดทศนิยม
+socket.emit('nav_goal', {
+        x: worldX,
+        y: worldY,
+        theta: 0
+    });
+    
+    // Update goal info text - แสดงทศนิยม 6 ตำแหน่ง
+    goalInfo.textContent = `กำลังนำทางไปยังพิกัด (${worldX.toFixed(6)}, ${worldY.toFixed(6)})`;
+    goalInfo.classList.remove('bg-green-50', 'text-green-700', 'bg-red-50', 'text-red-700');
+    goalInfo.classList.add('bg-blue-50', 'text-blue-700');
+
+    // Remove old goal markers
+    const oldGoals = document.querySelectorAll('.goal-marker');
+    oldGoals.forEach(marker => marker.remove());
+    
+    // Create new goal marker with stored world coordinates
+    const goalMarker = document.createElement('div');
+    goalMarker.className = 'absolute w-3 h-3 bg-yellow-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 z-8 goal-marker';
+    goalMarker.style.left = clickX + 'px';
+    goalMarker.style.top = clickY + 'px';
+    
+    // Store world coordinates as data attributes for recalculation during zoom
+    goalMarker.dataset.worldX = worldX;
+    goalMarker.dataset.worldY = worldY;
+    
+    mapOverlay.appendChild(goalMarker);
+});
+
+    // เพิ่ม Event listener สำหรับการออกจากหน้า
+    window.addEventListener('beforeunload', function() {
+        debugLog('Page unloading, stopping robot');
+        socket.emit('cmd_vel', { linear_x: 0, angular_z: 0 });
+    });
+    
+    // สั่งหยุดหุ่นยนต์หากมีการสลับแท็บ
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState !== 'visible') {
+            debugLog('Page hidden, stopping robot');
+            socket.emit('cmd_vel', { linear_x: 0, angular_z: 0 });
+            
+            // Reset pressed keys when tab becomes hidden
+            pressedKeys.clear();
+        }
+    });
+    
+    // เพิ่มการตรวจสอบเมื่อมีการเปลี่ยนขนาดหน้าต่าง
+    window.addEventListener('resize', function() {
+        if (mapCanvas && mapImageLoaded && mapOverlay) {
+            const rect = mapCanvas.getBoundingClientRect();
+            mapOverlay.style.width = rect.width + 'px';
+            mapOverlay.style.height = rect.height + 'px';
+            debugLog(`Window resized, overlay adjusted to ${rect.width}x${rect.height}`);
+            
+            // Update positions of elements on the map
+            updateMapOverlayElements();
+        }
+    });
+    
+    // เริ่มต้นการทำงาน
+    document.addEventListener('DOMContentLoaded', function() {
+        debugLog('DOM loaded, initializing control system');
+        
+        // Setup control buttons
+        setupControlButtons();
+        
+        // Request initial map data
+        setTimeout(function() {
+            socket.emit('request_data_update');
+        }, 1000);
+    });
+</script>
+{% endblock %}
